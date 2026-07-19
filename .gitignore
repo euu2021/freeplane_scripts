@@ -1,0 +1,18 @@
+# Backups de editor / temporários
+*~
+*.tmp
+*.bak
+*.swp
+
+# Metadados de SO / OneDrive
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Restos de IDE (não usamos mais IntelliJ)
+.idea/
+out/
+*.iml
+
+# Cópias de conflito do OneDrive — revisar e apagar; NUNCA publicar
+*-DESKTOP-*.groovy
