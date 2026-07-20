@@ -9,42 +9,44 @@ import java.net.URI
 @SourceURI
 URI scriptUri
 
-scriptsDir = new File(scriptUri).parentFile
+// This tool lives one level under the scripts root
+// (e.g. ...\FP\Scripts\compartilhados\initScriptsTool.groovy), so its parent's
+// parent is the root that holds all the script subfolders.
+scriptsRoot = new File(scriptUri).parentFile.parentFile
 
-// Lista para armazenar os nomes dos scripts executados
+// Names of the init scripts that were executed
 def executedScripts = []
 
-// Check if the directory exists and is indeed a directory
-if (!scriptsDir.exists() || !scriptsDir.isDirectory()) {
-        println "Directory not found: ${scriptsDir.absolutePath}"
+if (!scriptsRoot?.exists() || !scriptsRoot.isDirectory()) {
+    println "Scripts root not found: ${scriptsRoot?.absolutePath}"
 } else {
-        // Iterate over all files in the folder (you can adjust to search recursively if needed)
-        scriptsDir.eachFile(FileType.FILES) { File file ->
-                // Optionally: consider only files with the .groovy extension
-                if (file.name.toLowerCase().endsWith('.groovy')) {
-                        // Read the first line of the file to check for the init annotation
-                        file.withReader('UTF-8') { reader ->
-                                def firstLine = reader.readLine()
-                                if (firstLine?.trim() == '//init') {
-                                        println "Executing init script: ${file.name}"
-                                        evaluate(file)
-                                        executedScripts.add(file.name)
-                                }
-                        }
+    // Iterate over every subfolder of the scripts root...
+    scriptsRoot.eachDir { File dir ->
+        // ...and, within each, run every .groovy whose first line is exactly '//init'
+        dir.eachFile(FileType.FILES) { File file ->
+            if (file.name.toLowerCase().endsWith('.groovy')) {
+                def firstLine = file.withReader('UTF-8') { it.readLine() }
+                if (firstLine?.trim() == '//init') {
+                    def label = "${file.parentFile.name}/${file.name}"
+                    println "Executing init script: ${label}"
+                    evaluate(file)
+                    executedScripts.add(label)
                 }
+            }
         }
+    }
 }
 
 // Build the message to be displayed
 def message
 if (executedScripts.size() > 0) {
-        message = "Executed init scripts: " + executedScripts.join(", ")
+    message = "Executed init scripts: " + executedScripts.join(", ")
 } else {
-        message = "No init scripts were executed."
+    message = "No init scripts were executed."
 }
 
 // Show a dialog with the executed scripts
 showMessageDialog(
-        Controller.currentController.mapViewManager.mapView.parent.parent,
-        message
+    Controller.currentController.mapViewManager.mapView.parent.parent,
+    message
 )
