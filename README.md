@@ -1,10 +1,12 @@
 # freeplane_scripts
 
-A collection of Groovy scripts for [Freeplane](https://www.freeplane.org/), by [euu2021](https://github.com/euu2021). Think of the table below as a menu: skim the descriptions and tags, grab whatever looks useful.
+A collection of Groovy scripts for [Freeplane](https://www.freeplane.org/), by euu2021. 
 
 ## How to use
 
-Each `.groovy` file is a standalone script. To use one, drop it into your Freeplane user scripts directory (or add its folder under *Preferences → Plugins → Scripting → Script directories*), restart Freeplane, then bind it to a menu entry or keyboard shortcut. Scripts whose first line is `//init` are listeners meant to run automatically at startup. Each file's header links to the forum thread it came from, if any.
+See [Start here page](https://docs.freeplane.org/scripting/Start_Here.html). 
+
+Each file's header links to the forum thread it came from, if any.
 
 ## Tags
 
@@ -30,7 +32,6 @@ Scripts can belong to more than one category, so they are tagged. Ctrl-F a tag t
 
 | Script | What it does | Tags |
 |---|---|---|
-| [a3a4MapView](a3a4MapView.groovy) | Resizes the map view to A3/A4 paper proportions. | `view` |
 | [applyCustomEdgeColors](applyCustomEdgeColors.groovy) | Applies the user-defined edge colors to the selected nodes and their whole branch, cycling through colors. | `styles` |
 | [autoScrollModes](autoScrollModes.groovy) | Selection listeners that keep the current node positioned as you navigate (auto-scroll modes). | `navigation` `view` `listener` |
 | [conditionalStyleByFilter](conditionalStyleByFilter.groovy) | Adds a conditional style to the nodes matched by a script filter. | `styles` `filter/search` |
@@ -55,6 +56,7 @@ Scripts can belong to more than one category, so they are tagged. Ctrl-F a tag t
 | [recentRootsNavigator_script1](recentRootsNavigator_script1.groovy) | Panel to navigate between recently used view-roots — a tabless jump-in workflow (main script). | `navigation` `maps` `panel/GUI` |
 | [recentRootsNavigator_script2](recentRootsNavigator_script2.groovy) | Companion launcher for the Recent Roots Navigator (second shortcut). | `navigation` `maps` |
 | [removeLastTag](removeLastTag.groovy) | Removes the last tag from the selected nodes. | `tags` `editing` |
+| [resizeMapOverview](resizeMapOverview.groovy) | Resizes the Map Overview panel (the bird's-eye overview box) to any width/height you set. | `view` `panel/GUI` |
 | [safeDeleteListener](safeDeleteListener.groovy) | Init listener that guards against accidental deletion of large branches. | `listener` `init` `editing` |
 | [saveEventAutosave](saveEventAutosave.groovy) | Enables autosave and sets up a timer around the save event. | `listener` |
 | [selectDOWN](selectDOWN.groovy) | Free-selects the node below and re-centers the view. | `navigation` `selection` |
