@@ -44,8 +44,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | [copyNodeIdWithHash](copyNodeIdWithHash.groovy) | Copies the selected node's ID to the clipboard with `#` prepended, ready to paste as an internal hyperlink. | `clipboard` `maps` |
 | [duplicateNode](duplicateNode.groovy) | Duplicates the selected node(s), placing each copy right below its original. | `editing` |
 | [foldSiblingsOfSelected](foldSiblingsOfSelected.groovy) | Navigation mode that folds the siblings of the selected node to keep focus on the current branch. | `fold/minimize` `navigation` `listener` |
-| [initScriptsTool](initScriptsTool.groovy) | Runs every `//init` script found across your script folders and reports which ran. | `init` |
-| [initScriptsToolBridge](initScriptsToolBridge.groovy) | Small bridge to drop in your profile's `scripts/init/` folder so `initScriptsTool` runs at startup. | `init` |
+| [initScriptsTool](initScriptsTool.groovy) · [Bridge](initScriptsToolBridge.groovy) | Runs every `//init` script found across your script folders and reports which ran; the *Bridge* is a small file you drop in your profile's `scripts/init/` folder so the tool runs at startup. | `init` |
 | [invertMapColors](invertMapColors.groovy) | Toggles the whole map between light and dark themes (styles + background). | `styles` |
 | [jfaceTreeViewer](jfaceTreeViewer.groovy) | Prototype: shows the map as a tree with attribute columns (JXTreeTable) over the map. | `panel/GUI` `experimental` |
 | [justifyTopicAlignment](justifyTopicAlignment.groovy) | Aligns each level automatically, XMind-style. | `view` `listener` |
