@@ -7,4 +7,4 @@
 // initScriptsTool, which then runs every `//init` script across the script folders.
 // Adjust the path below to wherever initScriptsTool.groovy lives on your machine.
 // Example (replace with your real path):
-evaluate(new File("/path/to/FP/Scripts/compartilhados/initScriptsTool.groovy"))
+evaluate(new File("/path/to/FP/Scripts/compartilhados/scripts/initScriptsTool.groovy"))
