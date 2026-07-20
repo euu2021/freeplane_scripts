@@ -1,3 +1,4 @@
+// Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: MIT
 // Discussion thread: https://sourceforge.net/p/freeplane/discussion/758437/thread/e9200db6c3/
 
