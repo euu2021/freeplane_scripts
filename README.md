@@ -2,6 +2,8 @@
 
 A collection of Groovy scripts for [Freeplane](https://www.freeplane.org/), by euu2021. 
 
+For more collections of scripts and add-on, see this page: [scripts collections](https://docs.freeplane.org/scripting/Finding_useful_scripts.html).
+
 ## How to use
 
 See [Start here page](https://docs.freeplane.org/scripting/Start_Here.html). 
@@ -71,6 +73,7 @@ Scripts can belong to more than one category, so they are tagged. Ctrl-F a tag t
 | [simpleTagCreator](simpleTagCreator.groovy) | Creates a new tag and adds it to the selected node. | `tags` `editing` |
 | [tagsImportFormat](tagsImportFormat.groovy) | Imports / normalizes a tag format into the node. | `tags` |
 | [tagsWithFormulaListener](tagsWithFormulaListener.groovy) | Listener that generates a set of tags from a formula. | `tags` `listener` |
+| [UtilityPanels](https://github.com/euu2021/Freeplane_UtilityPanels) ↗ | Collection of utility panels built into Freeplane's UI: quick search (with lines to results), recent nodes, breadcrumbs, in-place siblings preview, inspector tooltips, and more. Hosted in its own repository. | `panel/GUI` `filter/search` `navigation` |
 | [zoomTo100](zoomTo100.groovy) | Sets the map zoom to 100%. | `view` |
 
 ## License
