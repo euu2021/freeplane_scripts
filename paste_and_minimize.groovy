@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: CC0-1.0
+// Discussion thread: https://sourceforge.net/p/freeplane/discussion/758437/thread/e9200db6c3/
+
 //// @ExecutionModes({ON_SINGLE_NODE})
 
 menuUtils.executeMenuItems(['PasteAction',])

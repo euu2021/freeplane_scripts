@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2231
 
 @Grab(group='org.swinglabs.swingx', module='swingx-core', version='1.6.5-1')
@@ -146,7 +147,7 @@ treeTable.setForeground(Color.BLACK)
 treeTable.setSelectionForeground(Color.WHITE)
 treeTable.setSelectionBackground(Color.BLUE)
 
-// ----- Configurações Adicionais para Linhas de Grade Cinza -----
+// ----- Additional settings for gray grid lines -----
 
 // Enable grid lines
 treeTable.setShowGrid(true)
@@ -154,7 +155,7 @@ treeTable.setShowGrid(true)
 // Set grid color to gray
 treeTable.setGridColor(Color.GRAY)
 
-// (Opcional) Adjust intercell spacing for better visibility
+// (Optional) Adjust intercell spacing for better visibility
 // treeTable.setIntercellSpacing(new Dimension(1, 1))
 
 // Optional: Automatically adjust column widths

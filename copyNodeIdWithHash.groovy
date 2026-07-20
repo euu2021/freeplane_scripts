@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/issues/2795#issuecomment-3700079936
 
 // Copy Node ID with Hashtag

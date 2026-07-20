@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: CC0-1.0
+// Discussion thread: https://github.com/freeplane/freeplane/discussions/2485
+
 //script 2
 
 import groovy.transform.SourceURI

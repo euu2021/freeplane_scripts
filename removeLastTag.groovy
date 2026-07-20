@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/issues/2811#issuecomment-3765160102
 
 // Script to remove the last tag from selected nodes

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/issues/2732#issuecomment-3479925692
 
 // Script to quickly adjust Note style font size with a slider

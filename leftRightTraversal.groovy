@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/issues/2384#issuecomment-2809204920
 
 import org.freeplane.features.mode.Controller;

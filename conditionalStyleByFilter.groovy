@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2375
 
 import org.freeplane.api.MindMap as ApiMindMap

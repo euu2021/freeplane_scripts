@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2575
-
-// SPDX-License-Identifier: GPL-3.0-or-later
 
 import groovy.swing.SwingBuilder
 import javax.swing.*

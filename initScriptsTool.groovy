@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: CC0-1.0
+// Discussion thread: https://github.com/freeplane/freeplane/issues/2264
+
 import groovy.io.FileType
 import org.freeplane.features.mode.Controller
 import org.freeplane.features.mode.ModeController

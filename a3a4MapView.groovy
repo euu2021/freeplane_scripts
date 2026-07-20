@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/issues/1771#issuecomment-2042789498
 
 import javax.swing.JScrollPane

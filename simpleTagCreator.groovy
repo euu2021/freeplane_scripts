@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC0-1.0
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2633
 
 // Simple Tag Creator Script - Creates a new tag and adds to selected node
