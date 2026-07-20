@@ -4,53 +4,40 @@
 
 import groovy.io.FileType
 import org.freeplane.features.mode.Controller
-import org.freeplane.features.mode.ModeController
+import org.freeplane.core.resources.ResourceController
 import static javax.swing.JOptionPane.showMessageDialog
 
-import groovy.transform.SourceURI
-import java.net.URI
+// Runs every init script found in the registered script directories.
+// An init script is a `.groovy` with a line that is exactly `//init` among its
+// first lines (so a license/header block above the marker is fine).
 
-@SourceURI
-URI scriptUri
+def raw = ResourceController.resourceController.getProperty('script_directories') ?: ''
+def dirs = raw.split(/;+/).collect { it?.trim() }.findAll { it }.collect { new File(it) }
 
-// This tool lives one level under the scripts root
-// (e.g. ...\FP\Scripts\compartilhados\initScriptsTool.groovy), so its parent's
-// parent is the root that holds all the script subfolders.
-scriptsRoot = new File(scriptUri).parentFile.parentFile
+def isInit = { File file ->
+    file.withReader('UTF-8') { reader ->
+        for (int i = 0; i < 15; i++) {
+            def line = reader.readLine()
+            if (line == null) break
+            if (line.trim() == '//init') return true
+        }
+        return false
+    }
+}
 
-// Names of the init scripts that were executed
-def executedScripts = []
-
-if (!scriptsRoot?.exists() || !scriptsRoot.isDirectory()) {
-    println "Scripts root not found: ${scriptsRoot?.absolutePath}"
-} else {
-    // Iterate over every subfolder of the scripts root...
-    scriptsRoot.eachDir { File dir ->
-        // ...and, within each, run every .groovy whose first line is exactly '//init'
+def executed = []
+dirs.each { dir ->
+    if (dir.isDirectory()) {
         dir.eachFile(FileType.FILES) { File file ->
-            if (file.name.toLowerCase().endsWith('.groovy')) {
-                def firstLine = file.withReader('UTF-8') { it.readLine() }
-                if (firstLine?.trim() == '//init') {
-                    def label = "${file.parentFile.name}/${file.name}"
-                    println "Executing init script: ${label}"
-                    evaluate(file)
-                    executedScripts.add(label)
-                }
+            if (file.name.toLowerCase().endsWith('.groovy') && isInit(file)) {
+                def label = "${dir.name}/${file.name}"
+                println "Executing init script: ${label}"
+                evaluate(file)
+                executed << label
             }
         }
     }
 }
 
-// Build the message to be displayed
-def message
-if (executedScripts.size() > 0) {
-    message = "Executed init scripts: " + executedScripts.join(", ")
-} else {
-    message = "No init scripts were executed."
-}
-
-// Show a dialog with the executed scripts
-showMessageDialog(
-    Controller.currentController.mapViewManager.mapView.parent.parent,
-    message
-)
+def message = executed ? ("Executed init scripts: " + executed.join(", ")) : "No init scripts were executed."
+showMessageDialog(Controller.currentController.mapViewManager.mapView.parent.parent, message)
