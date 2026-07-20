@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: CC0-1.0
+// SPDX-License-Identifier: MIT
 
 // Bridge to run initScriptsTool.groovy at startup.
 // Put a copy of this file in your Freeplane profile's `scripts/init/` folder:

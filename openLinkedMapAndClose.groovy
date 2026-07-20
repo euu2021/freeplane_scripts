@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: CC0-1.0
+// SPDX-License-Identifier: MIT
 // Discussion thread: https://github.com/freeplane/freeplane/issues/2761#issuecomment-3591534515
 
 // @ExecutionModes({ON_SINGLE_NODE})

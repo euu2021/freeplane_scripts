@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: CC0-1.0
+// SPDX-License-Identifier: MIT
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2231
 
 @Grab(group='org.swinglabs.swingx', module='swingx-core', version='1.6.5-1')

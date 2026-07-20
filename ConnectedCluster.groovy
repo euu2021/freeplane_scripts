@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: CC0-1.0
+// SPDX-License-Identifier: MIT
 // Discussion thread: https://sourceforge.net/p/freeplane/discussion/758437/thread/00a59ea0d6/
 
 def n = node

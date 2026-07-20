@@ -17,4 +17,4 @@ Each `.groovy` file is a standalone script. To use one, drop it into your Freepl
 
 ## License
 
-CC0-1.0 — these scripts are released into the public domain (see `LICENSE`). No rights reserved; use them however you like.
+MIT — see `LICENSE`.
