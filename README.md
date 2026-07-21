@@ -71,6 +71,4 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | [UtilityPanels](https://github.com/euu2021/Freeplane_UtilityPanels) ↗ | Collection of utility panels built into Freeplane's UI: quick search (with lines to results), recent nodes, breadcrumbs, in-place siblings preview, inspector tooltips, and more. Hosted in its own repository. | `panel/GUI` `filter/search` `navigation` |
 | [zoomTo100](scripts/zoomTo100.groovy) | Sets the map zoom to 100%. | `view` |
 
-## License
 
-MIT — see `LICENSE`.
