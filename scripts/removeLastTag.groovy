@@ -1,5 +1,5 @@
 // Copyright (C) 2026  euu2021 (Github)
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://github.com/freeplane/freeplane/issues/2811#issuecomment-3765160102
 
 // Script to remove the last tag from selected nodes

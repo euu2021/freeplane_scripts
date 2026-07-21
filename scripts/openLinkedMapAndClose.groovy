@@ -1,5 +1,5 @@
 // Copyright (C) 2026  euu2021 (Github)
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://github.com/freeplane/freeplane/issues/2761#issuecomment-3591534515
 
 // @ExecutionModes({ON_SINGLE_NODE})
