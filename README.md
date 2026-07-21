@@ -66,6 +66,8 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | selectionLimitedToSiblings [Down](scripts/selectionLimitedToSiblingsDown.groovy) · [Up](scripts/selectionLimitedToSiblingsUp.groovy) | Extends the selection up/down, but only among siblings. | `selection` `navigation` |
 | [setCreationDateToChildren](scripts/setCreationDateToChildren.groovy) | Sets a creation date on the selected nodes' children via a dialog. | `editing` |
 | [simpleTagCreator](scripts/simpleTagCreator.groovy) | Creates a new tag and adds it to the selected node. | `tags` `editing` |
+| [TagCategoryDialogFilter](scripts/TagCategoryDialogFilter.groovy) | Docks a live filter field in the "Manage tag categories" dialog; each keystroke filters the tag tree and auto-expands it, so matches inside collapsed branches show up. | `tags` `filter/search` `panel/GUI` |
+| [TagFilterAutoExpand](scripts/TagFilterAutoExpand.groovy) | Makes the Tag panel's native filter auto-expand, so matching tags inside collapsed branches become visible (they stay hidden otherwise). Works as a menu or startup (init) script. | `tags` `filter/search` `init` |
 | [tagsImportFormat](scripts/tagsImportFormat.groovy) | Imports / normalizes a tag format into the node. | `tags` |
 | [tagsWithFormulaListener](scripts/tagsWithFormulaListener.groovy) | Listener that generates a set of tags from a formula. | `tags` `listener` |
 | [UtilityPanels](https://github.com/euu2021/Freeplane_UtilityPanels) ↗ | Collection of utility panels built into Freeplane's UI: quick search (with lines to results), recent nodes, breadcrumbs, in-place siblings preview, inspector tooltips, and more. Hosted in its own repository. | `panel/GUI` `filter/search` `navigation` |
