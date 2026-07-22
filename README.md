@@ -42,6 +42,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | [connectedNodesNavigator](scripts/connectedNodesNavigator.groovy) | Popup listing every node connected to the selected one (with direction), for quick jumping. | `navigation` `connectors` `panel/GUI` |
 | [ConnectedCluster](scripts/ConnectedCluster.groovy) | Selects the node plus every node linked to it by connectors. | `selection` `connectors` |
 | [copyNodeIdWithHash](scripts/copyNodeIdWithHash.groovy) | Copies the selected node's ID to the clipboard with `#` prepended, ready to paste as an internal hyperlink. | `clipboard` `maps` |
+| [CrossMapLinks](scripts/CrossMapLinks.groovy) | Panel showing the current map's cross-map links: OUT (this map links to), IN (backlinks / what links here), and Friends (connected maps you can browse in place, without opening them). Scans the active map's folder. | `maps` `navigation` `panel/GUI` |
 | [duplicateNode](scripts/duplicateNode.groovy) | Duplicates the selected node(s), placing each copy right below its original. | `editing` |
 | [foldSiblingsOfSelected](scripts/foldSiblingsOfSelected.groovy) | Navigation mode that folds the siblings of the selected node to keep focus on the current branch. | `fold/minimize` `navigation` `listener` |
 | [initScriptsTool](scripts/initScriptsTool.groovy) · [Bridge](scripts/initScriptsToolBridge.groovy) | Runs every `//init` script found across your script folders and reports which ran; the *Bridge* is a small file you drop in your profile's `scripts/init/` folder so the tool runs at startup. | `init` |
