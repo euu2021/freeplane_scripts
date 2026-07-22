@@ -68,9 +68,11 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | [setCreationDateToChildren](scripts/setCreationDateToChildren.groovy) | Sets a creation date on the selected nodes' children via a dialog. | `editing` |
 | [simpleTagCreator](scripts/simpleTagCreator.groovy) | Creates a new tag and adds it to the selected node. | `tags` `editing` |
 | [TagCategoryDialogFilter](scripts/TagCategoryDialogFilter.groovy) | Docks a live filter field in the "Manage tag categories" dialog; each keystroke filters the tag tree and auto-expands it, so matches inside collapsed branches show up. | `tags` `filter/search` `panel/GUI` |
+| [TagClickLocator](scripts/TagClickLocator.groovy) | Click a tag on a node in the map and it is located in the Tag Tree: the branches on its path expand and it is selected and scrolled into view (clears an active tag filter first). | `tags` `navigation` `panel/GUI` |
 | [TagFilterAutoExpand](scripts/TagFilterAutoExpand.groovy) | Makes the Tag panel's native filter auto-expand, so matching tags inside collapsed branches become visible (they stay hidden otherwise). Works as a menu or startup (init) script. | `tags` `filter/search` `init` |
 | [tagsImportFormat](scripts/tagsImportFormat.groovy) | Imports / normalizes a tag format into the node. | `tags` |
 | [tagsWithFormulaListener](scripts/tagsWithFormulaListener.groovy) | Listener that generates a set of tags from a formula. | `tags` `listener` |
+| [TagTreeSingleClickAssign](scripts/TagTreeSingleClickAssign.groovy) | Assign a tag to the selected node with a single left-click in the Tag Tree, instead of the default double-click. | `tags` `editing` |
 | [UtilityPanels](https://github.com/euu2021/Freeplane_UtilityPanels) ↗ | Collection of utility panels built into Freeplane's UI: quick search (with lines to results), recent nodes, breadcrumbs, in-place siblings preview, inspector tooltips, and more. Hosted in its own repository. | `panel/GUI` `filter/search` `navigation` |
 | [zoomTo100](scripts/zoomTo100.groovy) | Sets the map zoom to 100%. | `view` |
 
