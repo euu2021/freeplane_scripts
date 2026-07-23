@@ -123,6 +123,9 @@ class DungeonSfxBank {
     static final float SAMPLE_RATE = 44100f
     static final int CLIPS_PER_VARIATION = 2
     static final int SYNTH_VARIATIONS = 3
+    // Selection is heard far more often than any other action, so it gets a wider set of
+    // variations - and they differ in pitch, brightness, length and level, not just tuning.
+    static final int SELECT_VARIATIONS = 9
     static final List<String> EVENTS = ['select', 'create', 'move', 'delete', 'fold', 'unfold']
 
     private final File soundDir
@@ -134,6 +137,7 @@ class DungeonSfxBank {
     private final Map<String, List<List<Clip>>> pools = new LinkedHashMap<String, List<List<Clip>>>()
     private final Map<String, Long> lastPlayed = new HashMap<String, Long>()
     private final Map<String, Long> mutedUntil = new HashMap<String, Long>()
+    private final Map<String, Integer> lastVariation = new HashMap<String, Integer>()
     private final Random random = new Random()
     private final ExecutorService player = Executors.newSingleThreadExecutor({ Runnable task ->
         Thread thread = new Thread(task, 'dungeon-sfx-player')
@@ -166,7 +170,8 @@ class DungeonSfxBank {
         for (String event : enabledEvents) {
             List<Object> specs = fileVariations(event)
             if (specs.isEmpty()) {
-                for (int v = 0; v < SYNTH_VARIATIONS; v++) {
+                int variationCount = 'select' == event ? SELECT_VARIATIONS : SYNTH_VARIATIONS
+                for (int v = 0; v < variationCount; v++) {
                     specs.add(synthesize(theme, event, v))
                 }
                 synthesized++
@@ -292,7 +297,14 @@ class DungeonSfxBank {
         if (variations == null || variations.isEmpty()) {
             return
         }
-        List<Clip> group = variations.get(random.nextInt(variations.size()))
+        // never the same variation twice in a row: a repeat is exactly what the ear notices
+        int index = random.nextInt(variations.size())
+        Integer previous = lastVariation.get(event)
+        if (previous != null && index == previous.intValue() && variations.size() > 1) {
+            index = (index + 1 + random.nextInt(variations.size() - 1)) % variations.size()
+        }
+        lastVariation.put(event, Integer.valueOf(index))
+        List<Clip> group = variations.get(index)
         Clip chosen = null
         for (Clip clip : group) {
             if (!clip.isRunning()) {
@@ -356,11 +368,15 @@ class DungeonSfxBank {
         Random rnd = new Random(event.hashCode() * 197L + variation)
 
         if ('select' == event) {
-            // fingertip touching the top of a piece before lifting it
-            double[] out = buffer(110)
-            addWoodTap(out, 0, 980d * detune, 0.30d, 70d, 0.55d, rnd)
-            applyCave(out, 13d, 0.12d, 0.5d)
-            normalize(out, 0.30d)
+            // fingertip touching the top of a piece before lifting it - as if every piece on
+            // the board were a slightly different size, so no two touches sound alike
+            double pitch = 720d + rnd.nextDouble() * 620d
+            double length = 52d + rnd.nextDouble() * 40d
+            double brightness = 0.36d + rnd.nextDouble() * 0.42d
+            double[] out = buffer(length + 45d)
+            addWoodTap(out, 0, pitch, 0.30d, length, brightness, rnd)
+            applyCave(out, 11d + rnd.nextDouble() * 6d, 0.12d, 0.5d)
+            normalize(out, 0.26d + rnd.nextDouble() * 0.09d)
             return encode(out)
         }
         if ('create' == event) {
@@ -420,12 +436,16 @@ class DungeonSfxBank {
         Random rnd = new Random(event.hashCode() * 131L + variation)
 
         if ('select' == event) {
-            // a water drop falling into a puddle: pitch RISES as the cavity closes
-            double[] out = buffer(260)
+            // a water drop falling into a puddle: pitch RISES as the cavity closes. Drop size,
+            // how far the pitch climbs and how wet the cave is all change from drop to drop.
+            double pitch = 620d + rnd.nextDouble() * 420d
+            double climb = 1.7d + rnd.nextDouble() * 0.9d
+            double length = 30d + rnd.nextDouble() * 24d
+            double[] out = buffer(220d + rnd.nextDouble() * 90d)
             addNoise(out, 0, millis(4), 6000d, 3000d, 0.10d, 2.6d, rnd)
-            addSine(out, 0, millis(40), 820d * detune, 1750d * detune, 0.30d, 3.0d)
-            applyCave(out, 58d, 0.24d, 0.32d)
-            normalize(out, 0.34d)
+            addSine(out, 0, millis(length), pitch, pitch * climb, 0.30d, 2.6d + rnd.nextDouble() * 0.8d)
+            applyCave(out, 46d + rnd.nextDouble() * 26d, 0.20d + rnd.nextDouble() * 0.10d, 0.32d)
+            normalize(out, 0.30d + rnd.nextDouble() * 0.09d)
             return encode(out)
         }
         if ('create' == event) {
@@ -487,9 +507,13 @@ class DungeonSfxBank {
         double detune = 1d + (variation - 1) * 0.045d
         Random rnd = new Random(event.hashCode() * 31L + variation)
         if ('select' == event) {
-            double[] out = buffer(70)
+            double pitch = 880d + rnd.nextDouble() * 420d
+            double fall = 0.74d + rnd.nextDouble() * 0.18d
+            double length = 42d + rnd.nextDouble() * 26d
+            double[] out = buffer(length + 20d)
             addNoise(out, 0, millis(5), 7000d, 3000d, 0.16d, 2.2d, rnd)
-            addSweep(out, 0, millis(55), 1050d * detune, 880d * detune, 0.17d, 2.6d)
+            addSweep(out, 0, millis(length), pitch, pitch * fall, 0.15d + rnd.nextDouble() * 0.05d,
+                    2.3d + rnd.nextDouble() * 0.7d)
             return encode(out)
         }
         if ('create' == event) {
