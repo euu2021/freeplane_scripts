@@ -5,6 +5,8 @@
 // the Free Software Foundation, either version 2 of the License, or
 // (at your option) any later version.
 
+// Discussion thread: https://github.com/freeplane/freeplane/discussions/2945
+
 /***
  * Sound effects for map editing actions.
  *

@@ -28,6 +28,7 @@ Scripts can belong to more than one category, so they are tagged. Ctrl-F a tag t
 - `init` — runs once at startup
 - `view` — zoom, layout, viewport
 - `connectors` — works with connectors
+- `sound` — audio feedback
 - `experimental` — prototype / proof of concept
 
 ## Scripts
@@ -67,6 +68,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | selectionLimitedToSiblings [Down](scripts/selectionLimitedToSiblingsDown.groovy) · [Up](scripts/selectionLimitedToSiblingsUp.groovy) | Extends the selection up/down, but only among siblings. | `selection` `navigation` |
 | [setCreationDateToChildren](scripts/setCreationDateToChildren.groovy) | Sets a creation date on the selected nodes' children via a dialog. | `editing` |
 | [simpleTagCreator](scripts/simpleTagCreator.groovy) | Creates a new tag and adds it to the selected node. | `tags` `editing` |
+| [SoundEffects](scripts/SoundEffects.groovy) | Plays a short sound when a node is selected, created, moved or deleted, and when a branch is folded or unfolded. Each action has its own switch, and an action switched off is never installed. The sounds are synthesized in memory, so no audio file is needed — three themes are available (wooden chess pieces, dungeon, plain bleeps), and your own `.wav` files replace them if you prefer. Running the script again switches the sounds off. | `sound` `listener` |
 | [TagCategoryDialogFilter](scripts/TagCategoryDialogFilter.groovy) | Docks a live filter field in the "Manage tag categories" dialog; each keystroke filters the tag tree and auto-expands it, so matches inside collapsed branches show up. | `tags` `filter/search` `panel/GUI` |
 | [TagClickLocator](scripts/TagClickLocator.groovy) | Click a tag on a node in the map and it is located in the Tag Tree: the branches on its path expand and it is selected and scrolled into view (clears an active tag filter first). | `tags` `navigation` `panel/GUI` |
 | [TagFilterAutoExpand](scripts/TagFilterAutoExpand.groovy) | Makes the Tag panel's native filter auto-expand, so matching tags inside collapsed branches become visible (they stay hidden otherwise). Works as a menu or startup (init) script. | `tags` `filter/search` `init` |
