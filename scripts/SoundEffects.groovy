@@ -368,15 +368,27 @@ class DungeonSfxBank {
         Random rnd = new Random(event.hashCode() * 197L + variation)
 
         if ('select' == event) {
-            // fingertip touching the top of a piece before lifting it - as if every piece on
-            // the board were a slightly different size, so no two touches sound alike
-            double pitch = 720d + rnd.nextDouble() * 620d
-            double length = 52d + rnd.nextDouble() * 40d
-            double brightness = 0.36d + rnd.nextDouble() * 0.42d
-            double[] out = buffer(length + 45d)
-            addWoodTap(out, 0, pitch, 0.30d, length, brightness, rnd)
-            applyCave(out, 11d + rnd.nextDouble() * 6d, 0.12d, 0.5d)
-            normalize(out, 0.26d + rnd.nextDouble() * 0.09d)
+            // Fingertip touching the top of a piece before lifting it. Variation 0 is the
+            // reference tap, byte for byte; the others are a set of pieces of different sizes
+            // around it. Size drives everything at once, the way it does in a real piece: a
+            // smaller one rings higher, shorter and slightly brighter, a bigger one lower and
+            // longer. The sizes are laid out in order rather than drawn at random, so the set
+            // always covers both ends while staying crowded around the reference - and the
+            // thinnest tap is played a little softer, since height alone carries it.
+            boolean reference = variation == 0
+            int spreadCount = Math.max(2, SELECT_VARIATIONS - 1)
+            double size = reference ? 0d : 2d * (variation - 1) / (double) (spreadCount - 1) - 1d
+            double pitch = reference ? 980d :
+                    980d * Math.pow(2d, size * 0.62d) * (0.96d + rnd.nextDouble() * 0.08d)
+            double length = reference ? 70d :
+                    70d * Math.pow(2d, -size * 0.34d) * (0.94d + rnd.nextDouble() * 0.14d)
+            double brightness = reference ? 0.55d : 0.55d + size * 0.07d
+            double level = reference ? 0.30d : 0.30d * (1d - 0.13d * Math.max(0d, size))
+            double ratioJitter = reference ? 0d : 0.13d
+            double[] out = buffer(length + 40d)
+            addWoodTap(out, 0, pitch, 0.30d, length, brightness, ratioJitter, rnd)
+            applyCave(out, reference ? 13d : 11d + rnd.nextDouble() * 5d, 0.12d, 0.5d)
+            normalize(out, level)
             return encode(out)
         }
         if ('create' == event) {
@@ -643,9 +655,19 @@ class DungeonSfxBank {
     // a hard, dry click of a few milliseconds, then modes that are gone in a tenth of a second.
     private static void addWoodTap(double[] out, int at, double base, double amp, double lengthMs,
             double brightness, Random rnd) {
+        addWoodTap(out, at, base, amp, lengthMs, brightness, 0d, rnd)
+    }
+
+    // ratioJitter moves the upper partials without moving the fundamental: the tap keeps its
+    // pitch and weight but changes character, the way two pieces cut from the same block do
+    private static void addWoodTap(double[] out, int at, double base, double amp, double lengthMs,
+            double brightness, double ratioJitter, Random rnd) {
         addNoise(out, at, millis(5d + 3d * brightness), 4200d * brightness, 900d, 0.55d * amp, 2.4d, rnd)
-        addPartials(out, at, millis(lengthMs), base, [1d, 2.65d, 4.8d] as double[],
-                [0.62d * amp, 0.20d * amp, 0.07d * amp] as double[], 3.2d)
+        double second = 2.65d * (1d + (rnd.nextDouble() - 0.5d) * 2d * ratioJitter)
+        double third = 4.8d * (1d + (rnd.nextDouble() - 0.5d) * 2d * ratioJitter)
+        double secondAmp = 0.20d * amp * (1d + (rnd.nextDouble() - 0.5d) * ratioJitter * 4d)
+        addPartials(out, at, millis(lengthMs), base, [1d, second, third] as double[],
+                [0.62d * amp, secondAmp, 0.07d * amp] as double[], 3.2d)
     }
 
     // piece toppling and settling: knocks that get closer together and quieter, like a bouncing body
