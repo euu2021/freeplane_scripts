@@ -52,6 +52,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | [justifyTopicAlignment](scripts/justifyTopicAlignment.groovy) | Aligns each level automatically, XMind-style. | `view` `listener` |
 | [leftRightTraversal](scripts/leftRightTraversal.groovy) | Tweaks Left/Right arrow-key behavior when traversing nodes. | `navigation` `selection` |
 | [LiveFilterPanel](scripts/LiveFilterPanel.groovy) | Search panel that, on every keystroke, hides everything except the matches and their ancestor path (live filter over the whole map). | `filter/search` `panel/GUI` |
+| [LoremIpsumGenerator](scripts/LoremIpsumGenerator.groovy) | Fills the selected node with a random lorem ipsum subtree of a given size (1000 nodes by default): 1..10 children per node, mostly short texts with a thin long tail. For building large maps to test with. | `editing` |
 | navigationLimitedToSiblings [Down](scripts/navigationLimitedToSiblingsDown.groovy) · [UP](scripts/navigationLimitedToSiblingsUP.groovy) | Moves the selection up/down, but only among siblings (won't leave the level). | `navigation` `selection` |
 | [noteFontSizeSlider](scripts/noteFontSizeSlider.groovy) | Slider dialog to quickly adjust the Note style's font size. | `styles` `panel/GUI` |
 | [openLinkedMapAndClose](scripts/openLinkedMapAndClose.groovy) | Opens the map linked from the selected node and closes the current one (backlink navigation without piling up open maps). | `maps` `navigation` |
