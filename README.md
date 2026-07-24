@@ -77,6 +77,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | [tagsWithFormulaListener](scripts/tagsWithFormulaListener.groovy) | Listener that generates a set of tags from a formula. | `tags` `listener` |
 | [TagTreeSingleClickAssign](scripts/TagTreeSingleClickAssign.groovy) | Assign a tag to the selected node with a single left-click in the Tag Tree, instead of the default double-click. | `tags` `editing` |
 | [UtilityPanels](https://github.com/euu2021/Freeplane_UtilityPanels) ↗ | Collection of utility panels built into Freeplane's UI: quick search (with lines to results), recent nodes, breadcrumbs, in-place siblings preview, inspector tooltips, and more. Hosted in its own repository. | `panel/GUI` `filter/search` `navigation` |
+| [VisualEffects](scripts/VisualEffects.groovy) | Draws a short animation where a map action happened — select, create, move, delete, fold and unfold — each with several styles chosen in the config block. The visual companion to *SoundEffects*: painted on a transparent panel over the map view that reserves no space and does not intercept clicks, so nothing about the map behaviour changes. Running the script again switches it off. | `view` `listener` `panel/GUI` |
 | [zoomTo100](scripts/zoomTo100.groovy) | Sets the map zoom to 100%. | `view` |
 
 
