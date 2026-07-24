@@ -1,3 +1,4 @@
+// Discussion thread: https://github.com/freeplane/freeplane/discussions/2951
 // Copyright (c) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // This program is free software: you can redistribute it and/or modify
