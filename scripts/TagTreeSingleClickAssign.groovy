@@ -1,7 +1,7 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://github.com/freeplane/freeplane/issues/2926
-// Version: 1.0
+// Version: 1.1
 
 /***************************************************************************
 
@@ -31,7 +31,19 @@
  Scope: the panel tree only (a JTagTree inside the main JFrame), NOT the "Manage tag
  categories" dialog (that one is for editing the hierarchy, not assigning).
 
+ Assignment is suspended while the tag tree is in edit mode, that is, while the client
+ property "TagTreeEditMode" is TRUE on the main root pane (set by the companion script
+ TagTreeKeyboardReorder). Reorganizing the hierarchy means clicking tags to select them,
+ and every such click would otherwise tag the current node.
+
  The native double-click still works (it just becomes redundant). Run once = ON, again = OFF.
+
+ CHANGELOG
+ ---------
+ 1.1 (2026-07-26)  Clicks no longer assign a tag while the tag tree is in edit mode, so
+                   reorganizing the hierarchy with the companion script
+                   TagTreeKeyboardReorder does not tag the current node on every click.
+ 1.0 (2026-07-26)  First versioned release. Earlier history is in the repository log.
 
  *****************************************************************/
 
@@ -52,6 +64,7 @@ import java.awt.event.AWTEventListener
 import java.awt.event.MouseEvent
 
 @Field final String LISTENER_KEY = "TagTreeSingleClickAssignListener"
+@Field final String EDIT_MODE_KEY = "TagTreeEditMode"
 
 
 JRootPane anchor = findMainRootPane()
@@ -78,6 +91,8 @@ AWTEventListener listener = new AWTEventListener() {
         // panel tree only, not the manager dialog
         Window w = SwingUtilities.getWindowAncestor(comp)
         if (!(w instanceof JFrame)) return
+        // in edit mode a click selects a tag to be reorganized, it does not assign it
+        if (Boolean.TRUE == ((JFrame) w).getRootPane().getClientProperty(EDIT_MODE_KEY)) return
         try { assignTagAt((JTree) comp, e.getX(), e.getY()) } catch (Throwable ignore) {}
     }
 }
