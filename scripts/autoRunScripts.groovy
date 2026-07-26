@@ -1,0 +1,1033 @@
+// Copyright (C) 2026  euu2021 (Github)
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Version: 1.0
+
+import java.awt.*
+import java.awt.event.*
+import javax.swing.*
+import javax.swing.event.*
+import javax.swing.table.*
+import java.util.List // after java.awt.*, whose own List is not generic
+import java.util.regex.Pattern
+
+import org.freeplane.core.resources.ResourceController
+import org.freeplane.core.ui.components.UITools
+import org.freeplane.core.util.FileUtils
+import org.freeplane.core.util.LogUtils
+import org.freeplane.features.map.IMapLifeCycleListener
+import org.freeplane.features.map.MapModel
+import org.freeplane.features.map.NodeModel
+import org.freeplane.features.mode.Controller
+import org.freeplane.features.ui.IMapViewChangeListener
+import org.freeplane.main.application.ApplicationLifecycleListener
+import org.freeplane.plugin.script.ScriptingEngine
+
+// Runs scripts automatically, on the trigger chosen for each of them.
+//
+// One file, two jobs. Called from <user directory>/scripts/init/ it installs the triggers
+// and runs the STARTUP ones; called from the Scripts menu it opens the configuration
+// dialog. Which job is wanted is decided by the caller: the init script sets
+// UIManager.put('autoRunScripts.bootstrap', Boolean.TRUE) before calling, the menu does not.
+//
+// INSTALLATION
+// ------------
+// 1. Put this file in any of your script directories, next to your other scripts. Running it
+//    from the Scripts menu opens the configuration window.
+// 2. Save the bridge below as autoRunScriptsBridge.groovy in <user directory>/scripts/init/ --
+//    the only folder Freeplane runs on its own. It looks this file up by name in the script
+//    directories, so neither file needs editing.
+//
+//     import org.freeplane.core.resources.ResourceController
+//     import org.freeplane.core.util.FileUtils
+//     import org.freeplane.core.util.LogUtils
+//     import org.freeplane.features.mode.Controller
+//     import org.freeplane.plugin.script.ScriptingEngine
+//
+//     def resourceController = ResourceController.resourceController
+//     def userDirectory = resourceController.freeplaneUserDirectory
+//     def script = (resourceController.getProperty('script_directories') ?: '')
+//             .split(/;+/)*.trim().findAll { it }
+//             .collect { new File(FileUtils.getAbsoluteFile(userDirectory, it), 'autoRunScripts.groovy') }
+//             .find { it.isFile() }
+//
+//     if (script == null) {
+//         LogUtils.warn('autoRunScripts.groovy not found in any of the configured script directories')
+//     }
+//     else {
+//         javax.swing.UIManager.put('autoRunScripts.bootstrap', Boolean.TRUE)
+//         ScriptingEngine.executeScript(Controller.currentController.selection?.selected, script, null)
+//     }
+//
+// Restart Freeplane once, so that both files are picked up.
+//
+// Configuration lives in <user directory>/autoRunScripts.txt: one line per script,
+// "<TRIGGER><tab><path>", in execution order, with a third tab-separated field holding the
+// interval in minutes for PERIODIC. Lines without a tab are read as STARTUP, the format
+// written by earlier versions. '#' comments and blank lines are ignored.
+//
+// Triggers:
+//   STARTUP       once, when Freeplane has finished starting
+//   MAP_OPENED    for every map created or loaded, plus the maps already restored at
+//                 startup (they load before init scripts run, so they would be missed)
+//   MAP_CLOSED    when a map is closed, including on the way out of Freeplane
+//   VIEW_CREATED  when a tab is created
+//   VIEW_SELECTED when a tab becomes the current one
+//   PERIODIC      every N minutes, first run one interval after installation
+//   SHUTDOWN      when Freeplane is closing. Maps are still open at that point, but have
+//                 already been saved: a script that changes one must save it itself.
+//
+// Scripts run through ScriptingEngine, so each gets the usual bindings, with 'node' bound
+// to the map or tab that triggered it, and the user's script permissions. A script can ask
+// which trigger called it with UIManager.get('autoRunScripts.trigger'), which is MANUAL when
+// it was started from the buttons in the dialog.
+
+class AutoRunEntry {
+    File file
+    String trigger
+    int everyMinutes
+    // a disabled entry stays in the list, keeping its trigger, order and interval, so that
+    // switching a script off to test something does not cost you its configuration
+    boolean enabled
+
+    AutoRunEntry(File file, String trigger, int everyMinutes, boolean enabled) {
+        this.file = file
+        this.trigger = trigger
+        this.everyMinutes = everyMinutes
+        this.enabled = enabled
+    }
+}
+
+class AutoRunDispatcher {
+    static final List<String> TRIGGERS = ['STARTUP', 'MAP_OPENED', 'MAP_CLOSED',
+                                          'VIEW_CREATED', 'VIEW_SELECTED', 'PERIODIC', 'SHUTDOWN']
+    static final int DEFAULT_MINUTES = 15
+    // switched-off entries are written as comments, so every reader skips them for free
+    static final String DISABLED_MARK = '#off '
+    static final String PAUSED_KEY = 'autoRunScripts.paused'
+    static final String GENERATION_KEY = 'autoRunScripts.generation'
+    static final String MAP_LISTENER_KEY = 'autoRunScripts.mapListener'
+    static final String VIEW_LISTENER_KEY = 'autoRunScripts.viewListener'
+    static final String TICKER_KEY = 'autoRunScripts.ticker'
+    // readable by the script being run, to find out which trigger called it
+    static final String TRIGGER_KEY = 'autoRunScripts.trigger'
+    static final String HISTORY_KEY = 'autoRunScripts.history'
+    static final String NOTIFIED_KEY = 'autoRunScripts.failureShown'
+    static final int HISTORY_LIMIT = 500
+
+    // Kept in UIManager rather than in a field, so that it survives this script being
+    // recompiled and reinstalled. Rows are maps of plain Strings on purpose: an object of a
+    // class declared here would be unreadable after recompilation, since the class is a new
+    // one -- and keys instead of positions mean an added field cannot break older rows.
+    static List history() {
+        def list = UIManager.get(HISTORY_KEY)
+        if (!(list instanceof List)) {
+            list = Collections.synchronizedList(new ArrayList())
+            UIManager.put(HISTORY_KEY, list)
+        }
+        return (List) list
+    }
+
+    static void record(String trigger, File file, NodeModel node, String result, Long millis) {
+        def list = history()
+        synchronized (list) {
+            list.add([time   : new Date().format('HH:mm:ss'),
+                      trigger: trigger,
+                      script : file.name.replaceFirst(/(?i)\.groovy$/, ''),
+                      node   : node?.text ?: '',
+                      // MMapModel.getTitle() is the short name, the one shown on the tab
+                      map    : node?.map?.title ?: '',
+                      millis : millis == null ? '' : String.valueOf(millis),
+                      result : result])
+            while (list.size() > HISTORY_LIMIT) list.remove(0)
+        }
+    }
+
+    final File listFile
+    Closure failureNotifier = null
+    private long stamp = -1L
+    private Map<String, List> byTrigger = [:]
+    private final Map<String, Long> lastPeriodicRun = new HashMap<String, Long>()
+
+    AutoRunDispatcher(File listFile) { this.listFile = listFile }
+
+    static boolean isStale(int generation) {
+        def current = UIManager.get(GENERATION_KEY)
+        return current != null && ((Integer) current).intValue() != generation
+    }
+
+    // reread only when the file changed, so an event costs one stat and a map lookup
+    synchronized List entriesFor(String trigger) {
+        if (listFile.lastModified() != stamp) reload()
+        return byTrigger[trigger] ?: new ArrayList()
+    }
+
+    private void reload() {
+        stamp = listFile.lastModified()
+        def loaded = [:]
+        TRIGGERS.each { loaded[it] = new ArrayList() }
+        if (listFile.isFile()) {
+            listFile.readLines('UTF-8').each { String raw ->
+                def line = raw.trim()
+                if (!line || line.startsWith('#')) return
+                def parts = line.split('\t')
+                def hasTrigger = parts.length >= 2 && TRIGGERS.contains(parts[0].trim())
+                def trigger = hasTrigger ? parts[0].trim() : 'STARTUP'
+                def path = hasTrigger ? parts[1].trim() : line
+                int minutes = DEFAULT_MINUTES
+                if (parts.length >= 3 && parts[2].trim().isInteger()) {
+                    minutes = Math.max(1, parts[2].trim() as int)
+                }
+                if (path) loaded[trigger] << [file: new File(path), every: minutes]
+            }
+        }
+        byTrigger = loaded
+    }
+
+    private Map executeOne(String trigger, File file, NodeModel node) {
+        if (!file.isFile()) {
+            LogUtils.warn("auto-run script not found (${trigger}): ${file}")
+            record(trigger, file, node, 'not found', null)
+            return [ok: false, message: "${file.name} (not found)".toString()]
+        }
+        long started = System.nanoTime()
+        try {
+            LogUtils.info("running auto-run script (${trigger}): ${file}")
+            ScriptingEngine.executeScript(node, file, null)
+            record(trigger, file, node, 'ok', Math.round((System.nanoTime() - started) / 1000000d))
+            return [ok: true, message: null]
+        }
+        catch (Throwable t) {
+            // one broken script must not stop the ones listed after it
+            LogUtils.warn("auto-run script failed (${trigger}): ${file}", t)
+            def reason = "${t.class.simpleName}: ${t.message}".toString()
+            record(trigger, file, node, reason, Math.round((System.nanoTime() - started) / 1000000d))
+            return [ok: false, message: "${file.name} (${reason})".toString()]
+        }
+    }
+
+    Map run(String trigger, NodeModel node) {
+        return runAll(trigger, entriesFor(trigger).collect { it.file }, node)
+    }
+
+    // deliberately not persisted: pausing survives no restart, so it cannot be forgotten
+    // in a way that silently disables everything tomorrow
+    static boolean isPaused() { return UIManager.get(PAUSED_KEY) != null }
+
+    Map runAll(String trigger, List<File> files, NodeModel node) {
+        int ok = 0
+        def failed = []
+        // manual runs from the dialog do not come through here, so they still work while paused
+        if (isPaused()) return [ok: 0, failed: []]
+        // let the script know why it was called; restore in case one run nests inside another
+        def previousTrigger = UIManager.get(TRIGGER_KEY)
+        UIManager.put(TRIGGER_KEY, trigger)
+        try {
+            files.each { File file ->
+                def outcome = executeOne(trigger, file, node)
+                if (outcome.ok) ok++ else failed << outcome.message
+            }
+        }
+        finally {
+            UIManager.put(TRIGGER_KEY, previousTrigger)
+        }
+        if (failed && failureNotifier != null) failureNotifier(trigger, failed)
+        return [ok: ok, failed: failed]
+    }
+
+    // called by the ticker: runs the periodic scripts whose interval has elapsed
+    void runDuePeriodic(NodeModel node) {
+        long now = System.currentTimeMillis()
+        def due = []
+        entriesFor('PERIODIC').each { entry ->
+            String key = entry.file.absolutePath
+            Long last = lastPeriodicRun[key]
+            if (last == null) {
+                lastPeriodicRun[key] = now
+                return
+            }
+            if (now - last >= entry.every * 60000L) {
+                lastPeriodicRun[key] = now
+                due << entry.file
+            }
+        }
+        if (due) runAll('PERIODIC', due, node)
+    }
+}
+
+class AutoRunMapTrigger implements IMapLifeCycleListener {
+    final AutoRunDispatcher dispatcher
+    final int generation
+
+    AutoRunMapTrigger(AutoRunDispatcher dispatcher, int generation) {
+        this.dispatcher = dispatcher
+        this.generation = generation
+    }
+
+    @Override
+    void onCreate(MapModel map) { fire('MAP_OPENED', map) }
+
+    @Override
+    void onRemove(MapModel map) { fire('MAP_CLOSED', map) }
+
+    private void fire(String trigger, MapModel map) {
+        if (AutoRunDispatcher.isStale(generation)) {
+            Controller.currentController.modeController.mapController.removeMapLifeCycleListener(this)
+            return
+        }
+        if (map != null) dispatcher.run(trigger, map.rootNode)
+    }
+}
+
+class AutoRunViewTrigger implements IMapViewChangeListener {
+    final AutoRunDispatcher dispatcher
+    final int generation
+    // Freeplane calls afterViewCreated once per attempt, not once per view: mapViewCreated()
+    // re-fires itself through a HierarchyListener until the view is showing and laid out
+    // (MapViewChangeObserverCompound:95-127). Weak keys so closed views can be collected.
+    private final Set<Component> alreadyCreated = Collections.newSetFromMap(new WeakHashMap<Component, Boolean>())
+
+    AutoRunViewTrigger(AutoRunDispatcher dispatcher, int generation) {
+        this.dispatcher = dispatcher
+        this.generation = generation
+    }
+
+    @Override
+    void afterViewCreated(Component newView) {
+        if (newView == null) return
+        synchronized (alreadyCreated) {
+            if (!alreadyCreated.add(newView)) return
+        }
+        fire('VIEW_CREATED', newView)
+    }
+
+    @Override
+    void afterViewChange(Component oldView, Component newView) { fire('VIEW_SELECTED', newView) }
+
+    private void fire(String trigger, Component view) {
+        def controller = Controller.currentController
+        if (AutoRunDispatcher.isStale(generation)) {
+            controller.mapViewManager.removeMapViewChangeListener(this)
+            return
+        }
+        if (view == null) return
+        def map = controller.mapViewManager.getMap(view)
+        if (map == null) return
+        def selected = controller.selection?.selected
+        def node = (selected != null && selected.map.is(map)) ? selected : map.rootNode
+        dispatcher.run(trigger, node)
+    }
+}
+
+// Controller has addApplicationLifecycleListener but no remove, so a superseded instance
+// cannot unregister -- it just turns into a no-op once its generation is stale.
+class AutoRunShutdownTrigger implements ApplicationLifecycleListener {
+    final AutoRunDispatcher dispatcher
+    final int generation
+
+    AutoRunShutdownTrigger(AutoRunDispatcher dispatcher, int generation) {
+        this.dispatcher = dispatcher
+        this.generation = generation
+    }
+
+    @Override
+    void onStartupFinished() {}
+
+    @Override
+    void onApplicationStopped() {
+        if (AutoRunDispatcher.isStale(generation)) return
+        dispatcher.run('SHUTDOWN', Controller.currentController.selection?.selected)
+    }
+}
+
+class AutoRunTableModel extends AbstractTableModel {
+    private static final String[] COLUMNS = ['On', '#', 'Trigger', 'Every', 'Script', 'Folder'] as String[]
+    final List<AutoRunEntry> active = new ArrayList<AutoRunEntry>()
+    final List<File> inactive = new ArrayList<File>()
+    List<String> triggerLabels
+    Closure onChange = {}
+
+    int getRowCount() { active.size() + inactive.size() }
+
+    int getColumnCount() { COLUMNS.length }
+
+    String getColumnName(int column) { COLUMNS[column] }
+
+    Class getColumnClass(int column) { column == 0 ? Boolean : String }
+
+    boolean isCellEditable(int row, int column) {
+        if (column == 0 || column == 2) return true
+        // the interval only means anything for periodic scripts
+        return column == 3 && row < active.size() && active[row].trigger == 'PERIODIC'
+    }
+
+    File fileAt(int row) {
+        return row < active.size() ? active[row].file : inactive[row - active.size()]
+    }
+
+    Object getValueAt(int row, int column) {
+        boolean configured = row < active.size()
+        File file = fileAt(row)
+        if (column == 0) return Boolean.valueOf(configured && active[row].enabled)
+        if (column == 4) return file.name.replaceFirst(/(?i)\.groovy$/, '')
+        if (column == 5) return file.isFile() ? file.parentFile.name : 'MISSING'
+        if (!configured) return ''
+        def entry = active[row]
+        if (column == 2) return triggerLabels[AutoRunDispatcher.TRIGGERS.indexOf(entry.trigger)]
+        if (column == 3) return entry.trigger == 'PERIODIC' ? "${entry.everyMinutes} min".toString() : ''
+        if (!entry.enabled) return '--'
+        return String.valueOf(active.take(row).count { it.trigger == entry.trigger && it.enabled } + 1)
+    }
+
+    void setValueAt(Object value, int row, int column) {
+        File file = fileAt(row)
+        if (column == 0) {
+            // switching off keeps the entry, its trigger, its place and its interval
+            if (row < active.size()) active[row].enabled = (Boolean.TRUE == value)
+            else if (Boolean.TRUE == value) activate(file, 'STARTUP', AutoRunDispatcher.DEFAULT_MINUTES, true)
+            else return
+        }
+        else if (column == 2) {
+            int index = triggerLabels.indexOf(String.valueOf(value))
+            if (index < 0) return
+            int minutes = row < active.size() ? active[row].everyMinutes : AutoRunDispatcher.DEFAULT_MINUTES
+            boolean enabled = row < active.size() ? active[row].enabled : true
+            activate(file, AutoRunDispatcher.TRIGGERS[index], minutes, enabled)
+        }
+        else if (column == 3) {
+            if (row >= active.size()) return
+            def digits = String.valueOf(value).replaceAll(/\D/, '')
+            if (!digits) return
+            active[row].everyMinutes = Math.max(1, digits as int)
+        }
+        else return
+        fireTableDataChanged()
+        onChange(file)
+    }
+
+    void activate(File file, String trigger, int everyMinutes, boolean enabled) {
+        active.removeAll { it.file == file }
+        inactive.remove(file)
+        active.add(new AutoRunEntry(file, trigger, everyMinutes, enabled))
+        regroup()
+    }
+
+    // takes the entry off the list for good, unlike unticking it
+    void remove(File file) {
+        active.removeAll { it.file == file }
+        if (file.isFile() && !inactive.contains(file)) {
+            inactive.add(file)
+            sortInactive()
+        }
+    }
+
+    // stable sort: entries keep their relative order inside a trigger, and one whose trigger
+    // just changed lands at the end of its new group because it was re-added last
+    void regroup() {
+        Collections.sort(active, { AutoRunEntry a, AutoRunEntry b ->
+            AutoRunDispatcher.TRIGGERS.indexOf(a.trigger) <=> AutoRunDispatcher.TRIGGERS.indexOf(b.trigger)
+        } as Comparator)
+    }
+
+    void sortInactive() {
+        inactive.sort { File a, File b ->
+            (a.parentFile.name + '/' + a.name).compareToIgnoreCase(b.parentFile.name + '/' + b.name)
+        }
+    }
+}
+
+def TRIGGER_LABELS = ['Startup', 'Map opened', 'Map closed', 'Tab created', 'Tab selected',
+                      'Periodic', 'Freeplane closing']
+def labelOf = { String key -> TRIGGER_LABELS[AutoRunDispatcher.TRIGGERS.indexOf(key)] }
+
+def userDir = new File(ResourceController.resourceController.freeplaneUserDirectory)
+def listFile = new File(userDir, 'autoRunScripts.txt')
+def dialogName = 'autoRunScriptsDialog'
+
+// script_directories accepts relative paths, resolved against the user directory
+def scriptDirs = {
+    (ResourceController.resourceController.getProperty('script_directories') ?: '')
+            .split(/;+/)*.trim().findAll { it }
+            .collect { FileUtils.getAbsoluteFile(userDir.absolutePath, it) }
+            .findAll { it.isDirectory() }
+}
+
+def readEntries = {
+    def entries = []
+    if (!listFile.isFile()) return entries
+    listFile.readLines('UTF-8').each { String raw ->
+        def line = raw.trim()
+        if (!line) return
+        // a disabled entry is written as a comment, so that whoever runs the list -- this
+        // script, or an older version of it -- skips it without having to know the marker
+        boolean enabled = true
+        if (line.startsWith(AutoRunDispatcher.DISABLED_MARK)) {
+            enabled = false
+            line = line.substring(AutoRunDispatcher.DISABLED_MARK.length())
+        }
+        else if (line.startsWith('#')) return
+        def parts = line.split('\t')
+        def hasTrigger = parts.length >= 2 && AutoRunDispatcher.TRIGGERS.contains(parts[0].trim())
+        def trigger = hasTrigger ? parts[0].trim() : 'STARTUP'
+        def path = hasTrigger ? parts[1].trim() : line
+        int minutes = AutoRunDispatcher.DEFAULT_MINUTES
+        if (parts.length >= 3 && parts[2].trim().isInteger()) minutes = Math.max(1, parts[2].trim() as int)
+        if (path) entries << new AutoRunEntry(new File(path), trigger, minutes, enabled)
+    }
+    return entries
+}
+
+def writeEntries = { List entries ->
+    def lines = ['# Scripts run automatically, one "<TRIGGER><tab><path>" per line, in order.',
+                 '# A third field holds the interval in minutes, for PERIODIC.',
+                 '# Lines starting with "' + AutoRunDispatcher.DISABLED_MARK.trim() + '" are switched off but keep their settings.',
+                 '# Maintained by autoRunScripts.groovy.']
+    lines += entries.collect {
+        def line = it.trigger + '\t' + it.file.absolutePath.replace('\\', '/')
+        if (it.trigger == 'PERIODIC') line += '\t' + it.everyMinutes
+        return it.enabled ? line : AutoRunDispatcher.DISABLED_MARK + line
+    }
+    listFile.setText(lines.join('\n') + '\n', 'UTF-8')
+}
+
+// Legacy migration: earlier versions marked startup scripts with a '//init' line inside
+// the file itself. Seed the list from those marks, once.
+if (!listFile.isFile()) {
+    def marked = []
+    scriptDirs().each { dir ->
+        def groovyFiles = dir.listFiles({ File f ->
+            f.isFile() && f.name.toLowerCase().endsWith('.groovy')
+        } as FileFilter)
+        groovyFiles?.sort { it.name.toLowerCase() }?.each { File f ->
+            f.withReader('UTF-8') { reader ->
+                for (int i = 0; i < 15; i++) {
+                    def line = reader.readLine()
+                    if (line == null) break
+                    if (line.trim() == '//init') { marked << f; break }
+                }
+            }
+        }
+    }
+    LogUtils.info("creating ${listFile} from ${marked.size()} script(s) marked with //init")
+    writeEntries(marked.collect { new AutoRunEntry(it, 'STARTUP', AutoRunDispatcher.DEFAULT_MINUTES, true) })
+}
+
+// Column widths are measured from the font in use, never guessed in pixels: with a scaled
+// UI a hardcoded 80px turns "12:20:07" into "12:2...".
+def columnWidthFor = { JTable table, int index, String widest ->
+    def column = table.columnModel.getColumn(index)
+    int content = table.getFontMetrics(table.font).stringWidth(widest)
+    int header = table.tableHeader.getFontMetrics(table.tableHeader.font)
+            .stringWidth(String.valueOf(column.headerValue))
+    return Math.max(content, header) + 18
+}
+
+def fixColumn = { JTable table, int index, String widest ->
+    int width = columnWidthFor(table, index, widest)
+    table.columnModel.getColumn(index).with {
+        minWidth = width
+        maxWidth = width
+        preferredWidth = width
+    }
+}
+
+def preferColumn = { JTable table, int index, String typical ->
+    table.columnModel.getColumn(index).preferredWidth = columnWidthFor(table, index, typical)
+}
+
+// row height from the font too: a guessed 20px clips the descenders of g, p and j
+def fitRowHeight = { JTable table ->
+    table.rowHeight = Math.max(table.rowHeight, table.getFontMetrics(table.font).height + 8)
+}
+
+def sizeTableToColumns = { JTable table, int visibleRows ->
+    int width = (0..<table.columnCount).sum { table.columnModel.getColumn(it).preferredWidth }
+    table.preferredScrollableViewportSize = new Dimension((int) width, table.rowHeight * visibleRows)
+}
+
+// pack() gives the dialog the size its content asks for; this keeps that size, and the
+// dialog itself, inside the usable screen area -- which is what went wrong before.
+def placeInsideScreen = { JDialog dialog, int offset ->
+    def frame = UITools.currentFrame
+    def configuration = frame?.graphicsConfiguration ?:
+            GraphicsEnvironment.localGraphicsEnvironment.defaultScreenDevice.defaultConfiguration
+    Rectangle screen = configuration.bounds
+    Insets insets = Toolkit.defaultToolkit.getScreenInsets(configuration)
+    int usableX = screen.x + insets.left
+    int usableY = screen.y + insets.top
+    int usableWidth = screen.width - insets.left - insets.right
+    int usableHeight = screen.height - insets.top - insets.bottom
+
+    int width = Math.min(dialog.width, usableWidth)
+    int height = Math.min(dialog.height, usableHeight)
+    dialog.setSize(width, height)
+
+    int x = (frame ? (int) (frame.x + (frame.width - width) / 2) : usableX) + offset
+    int y = (frame ? (int) (frame.y + (frame.height - height) / 2) : usableY) + offset
+    dialog.setLocation(Math.max(usableX, Math.min(x, usableX + usableWidth - width)),
+            Math.max(usableY, Math.min(y, usableY + usableHeight - height)))
+}
+
+// What ran, when, why, and how long it took. Memory only -- empty on every Freeplane start.
+def openHistory = {
+    def historyName = 'autoRunHistoryDialog'
+    Window.windows.findAll { it.name == historyName && it.displayable }.each { it.dispose() }
+
+    def prettyTrigger = { String key ->
+        int index = AutoRunDispatcher.TRIGGERS.indexOf(key)
+        return index >= 0 ? TRIGGER_LABELS[index] : key.toLowerCase().capitalize()
+    }
+
+    def model = new DefaultTableModel(['Time', 'Trigger', 'Script', 'Node', 'Map', 'ms', 'Result'] as String[], 0)
+    def table = new JTable(model)
+    table.setDefaultEditor(Object, null)
+    fitRowHeight(table)
+    fixColumn(table, 0, '00:00:00')
+    fixColumn(table, 1, 'Freeplane closing')
+    preferColumn(table, 2, 'a script with a fairly long name')
+    preferColumn(table, 3, 'a node with a fairly long text')
+    preferColumn(table, 4, 'a map name')
+    fixColumn(table, 5, '99999')
+    preferColumn(table, 6, 'IllegalStateException: message')
+    sizeTableToColumns(table, 14)
+
+    def rightAligned = new DefaultTableCellRenderer()
+    rightAligned.horizontalAlignment = SwingConstants.RIGHT
+    table.columnModel.getColumn(5).cellRenderer = rightAligned
+
+    def count = new JLabel(' ')
+    def refresh = {
+        def list = AutoRunDispatcher.history()
+        def snapshot
+        synchronized (list) { snapshot = new ArrayList(list) }
+        // rows written before a recompilation may be in an older shape; skip those
+        snapshot = snapshot.findAll { it instanceof Map }
+        if (model.rowCount == snapshot.size()) return
+        model.rowCount = 0
+        snapshot.each { row ->
+            model.addRow([row.time, prettyTrigger(row.trigger as String), row.script,
+                          row.node, row.map, row.millis, row.result] as Object[])
+        }
+        int failures = snapshot.count { it.result != 'ok' }
+        count.text = failures
+                ? "${model.rowCount} run(s) since Freeplane started, ${failures} failed"
+                : "${model.rowCount} run(s) since Freeplane started"
+        if (model.rowCount > 0) table.scrollRectToVisible(table.getCellRect(model.rowCount - 1, 0, true))
+    }
+    refresh()
+
+    def clearButton = new JButton('Clear')
+    clearButton.addActionListener({
+        def list = AutoRunDispatcher.history()
+        synchronized (list) { list.clear() }
+        model.rowCount = 0
+        count.text = '0 run(s) since Freeplane started'
+    } as ActionListener)
+    def closeHistoryButton = new JButton('Close')
+
+    def bar = new JPanel(new BorderLayout())
+    def leftBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6))
+    leftBar.add(count)
+    def rightBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6))
+    rightBar.add(clearButton)
+    rightBar.add(closeHistoryButton)
+    bar.add(leftBar, BorderLayout.WEST)
+    bar.add(rightBar, BorderLayout.EAST)
+
+    def content = new JPanel(new BorderLayout())
+    content.add(new JScrollPane(table), BorderLayout.CENTER)
+    content.add(bar, BorderLayout.SOUTH)
+
+    def dialog = new JDialog(UITools.currentFrame, 'Auto-run history', false)
+    dialog.name = historyName
+    dialog.contentPane = content
+    dialog.pack()
+    // DISPOSE, not the default HIDE: otherwise windowClosed never fires and the timer lives on
+    dialog.defaultCloseOperation = JDialog.DISPOSE_ON_CLOSE
+    closeHistoryButton.addActionListener({ dialog.dispose() } as ActionListener)
+    dialog.rootPane.registerKeyboardAction({ dialog.dispose() } as ActionListener,
+            KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW)
+
+    // keeps updating while open, so triggers can be watched as they happen
+    // qualified: java.util.Timer is a Groovy default import and would clash with javax.swing.*
+    def timer = new javax.swing.Timer(1000, { refresh() } as ActionListener)
+    timer.start()
+    dialog.addWindowListener(new WindowAdapter() {
+        @Override
+        void windowClosed(WindowEvent event) { timer.stop() }
+    })
+
+    // offset so it does not land exactly on top of the configuration dialog
+    placeInsideScreen(dialog, 60)
+    dialog.visible = true
+    return dialog
+}
+
+// A script that silently stopped running is worse than one that never ran, so the first
+// failure of the session opens the history by itself. Later ones only go to the status bar,
+// otherwise a script broken on VIEW_SELECTED would pop a window on every tab change.
+def notifyFailure = { String trigger, List failed ->
+    def message = "Auto-run failed on ${labelOf(trigger) ?: trigger}: ${failed.join('; ')}"
+    Controller.currentController?.viewController?.out(message)
+    if (UIManager.get(AutoRunDispatcher.NOTIFIED_KEY) != null) return
+    UIManager.put(AutoRunDispatcher.NOTIFIED_KEY, Boolean.TRUE)
+    SwingUtilities.invokeLater({ openHistory() } as Runnable)
+}
+
+// Installs the triggers, replacing whatever a previous run of this script left behind.
+// runStartupScripts is false when the dialog installs them just to make the window honest
+// about what is armed -- opening a window must not execute anybody's startup scripts.
+def install = { boolean runStartupScripts ->
+    def controller = Controller.currentController
+    def mapController = controller.modeController.mapController
+    def mapViewManager = controller.mapViewManager
+
+    def generation = ((UIManager.get(AutoRunDispatcher.GENERATION_KEY) ?: Integer.valueOf(0)) as int) + 1
+    UIManager.put(AutoRunDispatcher.GENERATION_KEY, Integer.valueOf(generation))
+
+    def previousView = UIManager.get(AutoRunDispatcher.VIEW_LISTENER_KEY)
+    if (previousView instanceof IMapViewChangeListener) mapViewManager.removeMapViewChangeListener(previousView)
+    def previousMap = UIManager.get(AutoRunDispatcher.MAP_LISTENER_KEY)
+    if (previousMap instanceof IMapLifeCycleListener) mapController.removeMapLifeCycleListener(previousMap)
+    new ArrayList(mapController.mapLifeCycleListeners)
+            .findAll { it.class.simpleName == 'AutoRunMapTrigger' }
+            .each { mapController.removeMapLifeCycleListener(it) }
+    def previousTicker = UIManager.get(AutoRunDispatcher.TICKER_KEY)
+    if (previousTicker instanceof javax.swing.Timer) previousTicker.stop()
+
+    def dispatcher = new AutoRunDispatcher(listFile)
+    dispatcher.failureNotifier = notifyFailure
+    def mapListener = new AutoRunMapTrigger(dispatcher, generation)
+    def viewListener = new AutoRunViewTrigger(dispatcher, generation)
+    def shutdownListener = new AutoRunShutdownTrigger(dispatcher, generation)
+    mapController.addMapLifeCycleListener(mapListener)
+    mapViewManager.addMapViewChangeListener(viewListener)
+    // Controller.fireStartupFinished() walks its listener list without copying it first
+    // (Controller.java:308-312), and init scripts run inside that very loop -- registering
+    // straight away throws ConcurrentModificationException and kills the rest of the startup.
+    // The other two listener lists are safe: both fire over a toArray() copy.
+    SwingUtilities.invokeLater({
+        if (!AutoRunDispatcher.isStale(generation)) controller.addApplicationLifecycleListener(shutdownListener)
+    } as Runnable)
+    UIManager.put(AutoRunDispatcher.MAP_LISTENER_KEY, mapListener)
+    UIManager.put(AutoRunDispatcher.VIEW_LISTENER_KEY, viewListener)
+    // published for diagnostics: lets the pieces be inspected or driven without waiting
+    // for the real event -- a periodic interval to elapse, or Freeplane to be closed
+    UIManager.put('autoRunScripts.shutdownListener', shutdownListener)
+    UIManager.put('autoRunScripts.dispatcher', dispatcher)
+
+    // one ticker for every periodic script; it asks the dispatcher which ones are due
+    def ticker = new javax.swing.Timer(30000, { event ->
+        if (AutoRunDispatcher.isStale(generation)) {
+            ((javax.swing.Timer) event.source).stop()
+            return
+        }
+        dispatcher.runDuePeriodic(Controller.currentController?.selection?.selected)
+    } as ActionListener)
+    ticker.start()
+    UIManager.put(AutoRunDispatcher.TICKER_KEY, ticker)
+
+    if (!runStartupScripts) return 'Auto-run triggers installed.'
+
+    def startup = dispatcher.run('STARTUP', controller.selection?.selected)
+
+    // Maps restored at startup were loaded before init scripts run, so MAP_OPENED never
+    // fired for them. Catch up, otherwise 'when a map opens' silently skips this session.
+    int caughtUp = 0
+    def failedCatchUp = []
+    if (dispatcher.entriesFor('MAP_OPENED')) {
+        // copy first: unique() mutates its receiver, and getMaps() hands out an unmodifiable view
+        new ArrayList(mapViewManager.maps.values()).unique { System.identityHashCode(it) }.each { MapModel map ->
+            def result = dispatcher.run('MAP_OPENED', map.rootNode)
+            caughtUp += result.ok
+            failedCatchUp += result.failed
+        }
+    }
+
+    def armed = AutoRunDispatcher.TRIGGERS.findAll { it != 'STARTUP' }
+            .collectEntries { [(it): dispatcher.entriesFor(it).size()] }.findAll { it.value }
+    def failed = startup.failed + failedCatchUp
+    def message = new StringBuilder("Auto-run scripts: ${startup.ok + caughtUp} executed")
+    if (armed) message.append(', armed ').append(armed.collect { "${it.value} on ${labelOf(it.key)}" }.join(', '))
+    if (failed) message.append(' -- failed: ').append(failed.join('; '))
+    return message.toString()
+}
+
+def openDialog = {
+    // getWindows() keeps listing disposed windows until they are collected, hence displayable
+    Window.windows.findAll { it.name == dialogName && it.displayable }.each { it.dispose() }
+
+    def model = new AutoRunTableModel()
+    model.triggerLabels = TRIGGER_LABELS
+    model.active.addAll(readEntries())
+    model.regroup()
+    def activeFiles = model.active.collect { it.file }
+    scriptDirs().each { dir ->
+        def groovyFiles = dir.listFiles({ File f ->
+            f.isFile() && f.name.toLowerCase().endsWith('.groovy')
+        } as FileFilter)
+        groovyFiles?.each { File f -> if (!activeFiles.contains(f)) model.inactive.add(f) }
+    }
+    model.sortInactive()
+
+    def table = new JTable(model)
+    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
+    fitRowHeight(table)
+    table.setAutoCreateRowSorter(false)
+    fixColumn(table, 0, 'On')
+    fixColumn(table, 1, '99')
+    // extra room: while editing, the combo box puts an arrow button inside this column
+    fixColumn(table, 2, 'Freeplane closing     ')
+    fixColumn(table, 3, '999 min')
+    preferColumn(table, 4, 'a script with a fairly long name')
+    preferColumn(table, 5, 'compartilhados')
+    sizeTableToColumns(table, 16)
+    table.columnModel.getColumn(2).setCellEditor(new DefaultCellEditor(new JComboBox(TRIGGER_LABELS as String[])))
+
+    def sorter = new TableRowSorter<AutoRunTableModel>(model)
+    (0..<model.columnCount).each { sorter.setSortable(it, false) }
+    table.setRowSorter(sorter)
+
+    def status = new JLabel(' ')
+    def filterField = new JTextField(18)
+
+    def describe = {
+        def counts = AutoRunDispatcher.TRIGGERS.collectEntries { key ->
+            [(key): model.active.count { it.trigger == key && it.enabled }]
+        }.findAll { it.value }
+        def text = counts ? counts.collect { "${it.value} on ${labelOf(it.key)}" }.join(', ') : 'nothing runs automatically'
+        int off = model.active.count { !it.enabled }
+        if (off) text += ", ${off} switched off"
+        if (AutoRunDispatcher.isPaused()) text = "PAUSED -- ${text}"
+        return text
+    }
+
+    def selectFile = { File file ->
+        int modelRow = (0..<model.rowCount).find { model.fileAt(it) == file }
+        if (modelRow == null) return
+        int viewRow = table.convertRowIndexToView(modelRow)
+        if (viewRow < 0) return
+        table.setRowSelectionInterval(viewRow, viewRow)
+        table.scrollRectToVisible(table.getCellRect(viewRow, 0, true))
+    }
+
+    model.onChange = { File file ->
+        writeEntries(model.active)
+        status.text = "Saved: ${describe()}."
+        selectFile(file)
+    }
+
+    def moveSelected = { int delta ->
+        int viewRow = table.selectedRow
+        if (viewRow < 0) return
+        int modelRow = table.convertRowIndexToModel(viewRow)
+        int target = modelRow + delta
+        if (modelRow >= model.active.size() || target < 0 || target >= model.active.size()) return
+        if (model.active[modelRow].trigger != model.active[target].trigger) return
+        Collections.swap(model.active, modelRow, target)
+        model.fireTableDataChanged()
+        writeEntries(model.active)
+        status.text = "Saved: ${describe()}."
+        selectFile(model.active[target].file)
+    }
+
+    def runFiles = { List<File> files ->
+        if (!files) { status.text = 'Nothing to run.'; return }
+        int ok = 0
+        def failed = []
+        def node = Controller.currentController.selection?.selected
+        UIManager.put(AutoRunDispatcher.TRIGGER_KEY, 'MANUAL')
+        files.each { File file ->
+            if (!file.isFile()) {
+                failed << "${file.name} (not found)"
+                AutoRunDispatcher.record('MANUAL', file, node, 'not found', null)
+                return
+            }
+            long started = System.nanoTime()
+            try {
+                LogUtils.info("running script on demand: ${file}")
+                ScriptingEngine.executeScript(node, file, null)
+                ok++
+                AutoRunDispatcher.record('MANUAL', file, node, 'ok',
+                        Math.round((System.nanoTime() - started) / 1000000d))
+            }
+            catch (Throwable t) {
+                LogUtils.warn("script failed: ${file}", t)
+                def reason = "${t.class.simpleName}: ${t.message}".toString()
+                failed << "${file.name} (${reason})"
+                AutoRunDispatcher.record('MANUAL', file, node, reason,
+                        Math.round((System.nanoTime() - started) / 1000000d))
+            }
+        }
+        UIManager.put(AutoRunDispatcher.TRIGGER_KEY, null)
+        status.text = failed ? "Ran ${ok}, failed: ${failed.join('; ')}" : "Ran ${ok} script(s)."
+    }
+
+    // double click on the script or folder cell opens the file, to save hunting for it
+    table.addMouseListener(new MouseAdapter() {
+        @Override
+        void mouseClicked(MouseEvent event) {
+            if (event.clickCount != 2) return
+            int viewColumn = table.columnAtPoint(event.point)
+            int viewRow = table.rowAtPoint(event.point)
+            if (viewRow < 0 || viewColumn < 4) return
+            def file = model.fileAt(table.convertRowIndexToModel(viewRow))
+            if (!file.isFile()) { status.text = "${file.name} no longer exists."; return }
+            try {
+                Desktop.desktop.open(file)
+                status.text = "Opened ${file.name}."
+            }
+            catch (Throwable t) {
+                LogUtils.warn("could not open ${file}", t)
+                status.text = "Could not open ${file.name}: ${t.message}"
+            }
+        }
+    })
+
+    def applyFilter = {
+        def text = filterField.text.trim()
+        sorter.setRowFilter(text ? RowFilter.regexFilter('(?i)' + Pattern.quote(text), 4, 5) : null)
+    }
+    filterField.document.addDocumentListener([
+            insertUpdate : { applyFilter() },
+            removeUpdate : { applyFilter() },
+            changedUpdate: { applyFilter() }
+    ] as DocumentListener)
+
+    def triggerHelp = '<html>Startup: once, when Freeplane has started.<br>' +
+            'Map opened: for every map loaded or created, including those restored at startup.<br>' +
+            'Map closed: when a map is closed, also on the way out.<br>' +
+            'Tab created: when a tab is opened.<br>' +
+            'Tab selected: every time a tab becomes the current one -- keep these fast.<br>' +
+            'Periodic: every N minutes, counted from when Freeplane started.<br>' +
+            'Freeplane closing: on the way out, with the maps still open but already saved.</html>'
+
+    def filterRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6))
+    filterRow.add(new JLabel('Filter:'))
+    filterRow.add(filterField)
+
+    // its own row: on a wide filter row this label was pushed off the dialog entirely
+    def hint = new JLabel('Tick a script and choose when it runs. Unticking keeps its settings. Double click opens it.')
+    hint.toolTipText = triggerHelp
+    hint.font = hint.font.deriveFont((float) (hint.font.size2D - 1f))
+    def hintRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0))
+    hintRow.add(hint)
+
+    def filterBar = new JPanel(new BorderLayout())
+    filterBar.add(filterRow, BorderLayout.NORTH)
+    filterBar.add(hintRow, BorderLayout.SOUTH)
+
+    def upButton = new JButton('▲')
+    def downButton = new JButton('▼')
+
+    def removeButton = new JButton('Remove')
+    removeButton.toolTipText = 'Take the selected script off the list. Unticking only switches it off, keeping its settings.'
+    removeButton.addActionListener({
+        int viewRow = table.selectedRow
+        if (viewRow < 0) return
+        int modelRow = table.convertRowIndexToModel(viewRow)
+        if (modelRow >= model.active.size()) return
+        def file = model.fileAt(modelRow)
+        model.remove(file)
+        model.fireTableDataChanged()
+        writeEntries(model.active)
+        status.text = "Removed ${file.name} from the list. Now: ${describe()}."
+    } as ActionListener)
+
+    def pauseButton = new JButton()
+    def updatePauseButton = {
+        boolean paused = AutoRunDispatcher.isPaused()
+        pauseButton.text = paused ? 'Resume' : 'Pause all'
+        pauseButton.toolTipText = paused
+                ? 'Triggers are suspended. Manual runs still work, and a restart resumes them anyway.'
+                : 'Suspend every trigger without touching the configuration'
+    }
+    pauseButton.addActionListener({
+        boolean paused = AutoRunDispatcher.isPaused()
+        UIManager.put(AutoRunDispatcher.PAUSED_KEY, paused ? null : Boolean.TRUE)
+        updatePauseButton()
+        def message = paused ? 'Auto-run triggers resumed.' : 'Auto-run triggers paused until you resume or restart.'
+        Controller.currentController?.viewController?.out(message)
+        status.text = "${message} Now: ${describe()}."
+    } as ActionListener)
+    updatePauseButton()
+
+    def runSelectedButton = new JButton('Run selected')
+    def runAllButton = new JButton('Run all ticked')
+    def historyButton = new JButton('History...')
+    historyButton.toolTipText = 'What ran automatically since Freeplane started, and how long it took'
+    historyButton.addActionListener({ openHistory() } as ActionListener)
+    def closeButton = new JButton('Close')
+
+    upButton.addActionListener({ moveSelected(-1) } as ActionListener)
+    downButton.addActionListener({ moveSelected(1) } as ActionListener)
+    runSelectedButton.addActionListener({
+        int viewRow = table.selectedRow
+        runFiles(viewRow < 0 ? [] : [model.fileAt(table.convertRowIndexToModel(viewRow))])
+    } as ActionListener)
+    runAllButton.addActionListener({ runFiles(model.active.collect { it.file }) } as ActionListener)
+
+    def buttonBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6))
+    [upButton, downButton, removeButton, runSelectedButton, runAllButton, historyButton, pauseButton]
+            .each { buttonBar.add(it) }
+    def rightBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6))
+    rightBar.add(closeButton)
+
+    def footer = new JPanel(new BorderLayout())
+    footer.add(buttonBar, BorderLayout.WEST)
+    footer.add(rightBar, BorderLayout.EAST)
+
+    def statusBar = new JPanel(new BorderLayout(6, 0))
+    statusBar.border = BorderFactory.createEmptyBorder(0, 8, 6, 8)
+    statusBar.add(status, BorderLayout.CENTER)
+    def pathLabel = new JLabel(listFile.absolutePath)
+    // cast needed: Groovy widens float arithmetic to Double, which deriveFont rejects
+    pathLabel.font = pathLabel.font.deriveFont((float) (pathLabel.font.size2D - 1f))
+    pathLabel.enabled = false
+    pathLabel.toolTipText = listFile.absolutePath
+    // long texts must not decide how wide the dialog gets: let them be clipped instead.
+    // the cast is needed: in Groovy dimension.height reaches getHeight(), which is a double
+    [status, pathLabel].each { it.preferredSize = new Dimension(0, (int) it.preferredSize.height) }
+    statusBar.add(pathLabel, BorderLayout.SOUTH)
+
+    def content = new JPanel(new BorderLayout())
+    content.add(filterBar, BorderLayout.NORTH)
+    content.add(new JScrollPane(table), BorderLayout.CENTER)
+    def south = new JPanel(new BorderLayout())
+    south.add(footer, BorderLayout.NORTH)
+    south.add(statusBar, BorderLayout.SOUTH)
+    content.add(south, BorderLayout.SOUTH)
+
+    def dialog = new JDialog(UITools.currentFrame, 'Scripts that run automatically', false)
+    dialog.name = dialogName
+    dialog.contentPane = content
+    dialog.pack()
+    closeButton.addActionListener({ dialog.dispose() } as ActionListener)
+    dialog.rootPane.defaultButton = closeButton
+    dialog.rootPane.registerKeyboardAction({ dialog.dispose() } as ActionListener,
+            KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW)
+
+    status.text = "${describe()}, out of ${model.rowCount} script(s) found."
+    placeInsideScreen(dialog, 0)
+    dialog.visible = true
+    return dialog
+}
+
+// The init one-liner sets the flag; the menu does not. Clear it either way, so that running
+// this script again from the menu opens the dialog instead of booting a second time.
+def bootstrap = Boolean.TRUE == UIManager.get('autoRunScripts.bootstrap')
+UIManager.put('autoRunScripts.bootstrap', null)
+
+if (bootstrap) {
+    def message = install(true)
+    LogUtils.info(message)
+    Controller.currentController.viewController?.out(message)
+    return message
+}
+
+// Opened from the menu. If the init one-liner is missing or failed, nothing would be armed
+// and the window would be lying about what runs, so arm the triggers without running anything.
+if (UIManager.get(AutoRunDispatcher.GENERATION_KEY) == null) {
+    LogUtils.info(install(false))
+}
+openDialog()
+'Auto-run scripts dialog opened.'

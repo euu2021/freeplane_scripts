@@ -74,6 +74,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | Script | What it does | Tags |
 |---|---|---|
 | [applyCustomEdgeColors](scripts/applyCustomEdgeColors.groovy) | Applies the user-defined edge colors to the selected nodes and their whole branch, cycling through colors. | `styles` |
+| [autoRunScripts](scripts/autoRunScripts.groovy) | Window to pick which scripts Freeplane runs by itself and when: at startup, when a map opens or closes, when a tab is created or selected, every N minutes, or on the way out. Keeps a history of what ran, with durations. | `init` `listener` `panel/GUI` |
 | [autoScrollModes](scripts/autoScrollModes.groovy) | Selection listeners that keep the current node positioned as you navigate (auto-scroll modes). | `navigation` `view` `listener` |
 | [conditionalStyleByFilter](scripts/conditionalStyleByFilter.groovy) | Adds a conditional style to the nodes matched by a script filter. | `styles` `filter/search` |
 | [connectedNodesNavigator](scripts/connectedNodesNavigator.groovy) | Popup listing every node connected to the selected one (with direction), for quick jumping. | `navigation` `connectors` `panel/GUI` |
