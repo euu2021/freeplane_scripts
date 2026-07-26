@@ -1,7 +1,7 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://sourceforge.net/p/freeplane/discussion/758437/thread/00a59ea0d6/
-// Version: 1.0.0
+// Version: 1.0
 
 def n = node
 def inCons = n.connectorsIn //collection of connectors pointing into the node

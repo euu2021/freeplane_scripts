@@ -19,7 +19,7 @@ everything you need to know about it lives in that file's header.
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/1234
-// Version: 1.2.0
+// Version: 1.2
 ```
 
 **Is my copy outdated?** Compare the `Version:` line of your file with the one here. If they
@@ -30,11 +30,10 @@ What the numbers mean:
 
 | Change | Meaning |
 |---|---|
-| **1**.0.0 → **2**.0.0 | You have to do something: reassign a shortcut, redo a setting, delete a state file, or upgrade Freeplane. Such entries are marked `(!)` in the changelog. |
-| 1.**0**.0 → 1.**1**.0 | New feature or new option. Replacing the file is enough. |
-| 1.0.**0** → 1.0.**1** | Fix or internal change, same usage. |
+| 1.**2** → 1.**3** | Anything you do not have to act on: a new feature, an option, a fix. Replacing the file is enough. |
+| **1**.3 → **2**.0 | You have to do something: reassign a shortcut, redo a setting, delete a state file, or upgrade Freeplane. Such entries are also marked `(!)` in the changelog. |
 
-Versioning starts on 2026-07-26, with every script at `1.0.0`; earlier history is in the
+Versioning starts on 2026-07-26, with every script at `1.0`; earlier history is in the
 repository log. A script only grows a `CHANGELOG` block once it changes after that date, so
 scripts that never needed a fix stay as short as they always were.
 

@@ -1,7 +1,7 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2375
-// Version: 1.0.0
+// Version: 1.0
 
 import org.freeplane.api.MindMap as ApiMindMap
 import org.freeplane.plugin.script.proxy.NodeProxy as ProxyNode
