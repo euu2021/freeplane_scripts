@@ -102,7 +102,11 @@
    1.1 - Survives a map whose tag registry holds a NAMELESS tag. Freeplane refuses to read
          the tags of such a map at all ("path contains blank segment"), and the panel used
          to report just that and stop. It now names the cause and offers a one-click repair
-         on the status bar, which drops the nameless tag as a normal undo step.
+         on the status bar, which drops the nameless tag from the registry AND from the nodes
+         that carry it (cleaning only the registry would let it come back on the next load),
+         as a normal undo step.
+         Also fixes a latent crash on any map with a TRANSLUCENT tag colour: blendColors took
+         a primitive float, and the alpha ratio is a Double in Groovy.
    1.0 - First public version.
 
  *****************************************************************/
@@ -1683,36 +1687,73 @@ List<DefaultMutableTreeNode> blankRegistryTagNodes(TagCategories categories) {
     return blanks
 }
 
-/** Removes the nameless tags from the map's registry. Asks first: it changes the map. */
+/**
+ * The NODES that carry a nameless tag. They are the source of the whole trouble: the registry
+ * entry is rebuilt from them on every load, so cleaning the registry alone fixes the map only
+ * until it is reopened. ✅ measured: a node saved with TAGS="&#xa;planilha" re-registers the
+ * empty tag when the .mm is read back.
+ */
+List<NodeModel> nodesWithBlankTags(MapModel map) {
+    List<NodeModel> found = []
+    Closure visit = null
+    visit = { NodeModel node ->
+        if (IconController.getController().getTags(node).any { it.getContent().trim().isEmpty() }) {
+            found << node
+        }
+        node.getChildren().each { visit(it) }
+    }
+    visit(map.getRootNode())
+    return found
+}
+
+/** Removes every nameless tag, from the registry AND from the nodes. Asks first: it changes the map. */
 void repairBlankRegistryTags() {
     MapModel map = boundMapView.map
     TagCategories categories
     List<DefaultMutableTreeNode> blanks
+    List<NodeModel> taggedNodes
     try {
         categories = map.getIconRegistry().getTagCategories()
         blanks = blankRegistryTagNodes(categories)
+        taggedNodes = nodesWithBlankTags(map)
     } catch (Throwable t) {
         showStatus("Could not inspect the tag registry: " + t.getMessage())
         return
     }
-    if (blanks.isEmpty()) {
+    if (blanks.isEmpty() && taggedNodes.isEmpty()) {
         showStatus("No nameless tag left in this map")
         refreshTree()
         return
     }
 
-    String count = blanks.size() + " nameless tag" + (blanks.size() == 1 ? "" : "s")
+    String nodePart = ""
+    if (!taggedNodes.isEmpty()) {
+        nodePart = "\n" + taggedNodes.size() + " node" + (taggedNodes.size() == 1 ? "" : "s") +
+                " actually carry one, and they are cleaned too — otherwise\n" +
+                "the registry entry comes back the next time the map is opened."
+    }
     int answer = JOptionPane.showConfirmDialog(tagPanel,
-            "This map carries " + count + " in its tag registry, and that makes\n" +
-            "Freeplane refuse to read the tags of the whole map.\n\n" +
-            "Remove it from the registry?\n" +
-            "No node loses a tag it actually uses, one Ctrl+Z undoes it, and the\n" +
-            "map has to be saved for the repair to stick.",
+            "This map carries " + blanks.size() + " nameless tag" +
+            (blanks.size() == 1 ? "" : "s") + " in its tag registry, and that\n" +
+            "makes Freeplane refuse to read the tags of the whole map." + nodePart + "\n\n" +
+            "Remove it?\n" +
+            "No node loses a tag that has a name, one Ctrl+Z undoes the whole\n" +
+            "repair, and the map has to be saved for it to stick.",
             "Repair the tag registry", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE)
     if (answer != JOptionPane.OK_OPTION) return
 
     try {
-        TagCategories repaired = categories.copy()
+        // the nodes first: setTags re-registers what is left, so the registry pass below sees
+        // the final picture
+        int cleanedNodes = 0
+        taggedNodes.each { NodeModel node ->
+            List<Tag> kept = IconController.getController().getTags(node)
+                    .findAll { !it.getContent().trim().isEmpty() }
+            IconController.getController().setTags(node, kept, false)
+            cleanedNodes++
+        }
+
+        TagCategories repaired = map.getIconRegistry().getTagCategories().copy()
         DefaultMutableTreeNode uncategorized = repaired.getUncategorizedTagsNode()
         int removed = 0
         for (int i = uncategorized.getChildCount() - 1; i >= 0; i--) {
@@ -1725,9 +1766,14 @@ void repairBlankRegistryTags() {
         }
         // MIconController.setTagCategories wraps the swap in an IActor, so the repair is a
         // normal undo step and marks the map unsaved
-        IconController.getController().setTagCategories(map, repaired)
-        showStatus("Removed " + removed + " nameless tag" + (removed == 1 ? "" : "s")
-                + " — save the map to keep the repair")
+        if (removed > 0) IconController.getController().setTagCategories(map, repaired)
+
+        String nodeSuffix = ""
+        if (cleanedNodes > 0) {
+            nodeSuffix = " and from " + cleanedNodes + " node" + (cleanedNodes == 1 ? "" : "s")
+        }
+        showStatus("Removed the nameless tag from the registry" + nodeSuffix +
+                " — save the map to keep the repair")
         refreshTree()
     } catch (Throwable t) {
         showStatus("Repair failed: " + t.getMessage())
@@ -3786,7 +3832,14 @@ Color panelBorderColor() {
     return new Color(base.getRed(), base.getGreen(), base.getBlue(), panelBorderOpacity)
 }
 
-Color blendColors(Color base, Color tint, float ratio) {
+// ⚠️ `double`, not `float`: in Groovy `anInt / 255f` evaluates to a DOUBLE (division never
+// yields a float), and a Double does NOT match a primitive `float` parameter when the call is
+// dispatched from inside an anonymous inner class — it fails with "No signature of method:
+// UnifiedTagPanel$<n>.blendColors() ... (Color, Color, Double)". It stayed hidden for as long
+// as every tag was opaque, because chipColor returns early on alpha 255 and only a TRANSLUCENT
+// tag colour ever reaches this call. A `double` parameter accepts float, double and BigDecimal
+// alike, so the whole family of surprises is gone.
+Color blendColors(Color base, Color tint, double ratio) {
     return new Color(
             (int) (base.getRed() + (tint.getRed() - base.getRed()) * ratio),
             (int) (base.getGreen() + (tint.getGreen() - base.getGreen()) * ratio),
