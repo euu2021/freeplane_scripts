@@ -1,8 +1,24 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Version: 1.0
+// Version: 1.1
 
-//init
+/***
+ * Warns before a deletion that is probably a mistake: a dialog appears when more than 20
+ * nodes would go at once, and another one for every node about to be deleted that carries
+ * a protected tag. Both the threshold and the list of protected tags are set in the code
+ * below.
+ *
+ * It only does something if it is running, so it has to be started automatically: register
+ * it in whatever runs your scripts at startup.
+ *
+ * CHANGELOG
+ * ---------
+ * 1.1 (2026-07-26)  The "//init" marker line was removed. Which scripts start automatically
+ *                   is now declared by the tool that starts them, not by a marker inside the
+ *                   file. If you were relying on initScriptsTool finding that marker, add
+ *                   this script to your autostart list instead.
+ * 1.0 (2026-07-26)  First versioned release. Earlier history is in the repository log.
+ */
 
 import org.freeplane.features.map.*
 import org.freeplane.features.mode.Controller

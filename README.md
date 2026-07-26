@@ -88,7 +88,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | recentRootsNavigator [script1](scripts/recentRootsNavigator_script1.groovy) · [script2](scripts/recentRootsNavigator_script2.groovy) | The Recent Roots Navigator — a tabless jump-in workflow to move between recently used view-roots (main panel + its launcher shortcut). | `navigation` `maps` `panel/GUI` |
 | [removeLastTag](scripts/removeLastTag.groovy) | Removes the last tag from the selected nodes. | `tags` `editing` |
 | [resizeMapOverview](scripts/resizeMapOverview.groovy) | Resizes the Map Overview panel (the bird's-eye overview box) to any width/height you set. | `view` `panel/GUI` |
-| [safeDeleteListener](scripts/safeDeleteListener.groovy) | Init listener that guards against accidental deletion of large branches. | `listener` `init` `editing` |
+| [safeDeleteListener](scripts/safeDeleteListener.groovy) | Listener that guards against accidental deletion: warns before a large branch goes, or before any node carrying a protected tag. Start it automatically. | `listener` `init` `editing` |
 | [saveEventAutosave](scripts/saveEventAutosave.groovy) | Enables autosave and sets up a timer around the save event. | `listener` |
 | select [DOWN](scripts/selectDOWN.groovy) · [UP](scripts/selectUP.groovy) · [LEFT](scripts/selectLEFT.groovy) · [RIGHT](scripts/selectRIGHT.groovy) | Free-selects the node in the given direction and re-centers the view. | `navigation` `selection` |
 | [selectLevel1Children](scripts/selectLevel1Children.groovy) | Selects the visible first-level children of the selected nodes. | `selection` |
