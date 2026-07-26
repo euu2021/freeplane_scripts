@@ -1,5 +1,6 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
+// Version: 1.0.0
 
 // Bridge to run initScriptsTool.groovy at startup.
 // Put a copy of this file in your Freeplane profile's `scripts/init/` folder:

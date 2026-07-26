@@ -1,0 +1,64 @@
+#!/bin/sh
+#
+# Refuses a push in which a published script changed without its "// Version:" line
+# changing too. It only proves that a bump happened, never that the bump is right.
+#
+# Install once per machine (from the repository root):
+#     git config core.hooksPath hooks
+#
+# To push anyway (a typo in a comment does not deserve a new version):
+#     git push --no-verify
+# or put [no-bump] in one of the commit messages being pushed.
+
+ZERO=0000000000000000000000000000000000000000
+FAILED=0
+
+version_of() {
+    # $1 = commit, $2 = path; prints the version, or nothing if absent
+    git show "$1:$2" 2>/dev/null | sed -n 's|^// *Version: *\([^ ]*\).*|\1|p' | head -1
+}
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+    [ "$local_sha" = "$ZERO" ] && continue
+
+    if [ "$remote_sha" = "$ZERO" ]; then
+        base=$(git rev-list --max-parents=0 "$local_sha" | tail -1)
+    else
+        base=$remote_sha
+    fi
+
+    if git log --format=%B "$base..$local_sha" | grep -qF '[no-bump]'; then
+        continue
+    fi
+
+    changed=$(git diff --name-only "$base" "$local_sha" -- 'scripts/*.groovy')
+    [ -z "$changed" ] && continue
+
+    for file in $changed; do
+        new=$(version_of "$local_sha" "$file")
+        old=$(version_of "$base" "$file")
+
+        if [ -z "$new" ]; then
+            if git cat-file -e "$local_sha:$file" 2>/dev/null; then
+                echo "pre-push: $file has no '// Version:' line in its header." >&2
+                FAILED=1
+            fi
+            continue
+        fi
+
+        if [ -n "$old" ] && [ "$old" = "$new" ]; then
+            echo "pre-push: $file changed but is still at version $new." >&2
+            FAILED=1
+        fi
+    done
+done
+
+if [ "$FAILED" -ne 0 ]; then
+    echo "" >&2
+    echo "Bump the version in the header and record the change in the script's" >&2
+    echo "CHANGELOG block, or push with --no-verify / [no-bump] if the change" >&2
+    echo "does not deserve a version." >&2
+    exit 1
+fi
+
+exit 0

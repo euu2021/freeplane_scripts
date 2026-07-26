@@ -4,8 +4,8 @@
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 2 of the License, or
 // (at your option) any later version.
-
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2945
+// Version: 1.0.0
 
 /***
  * Sound effects for map editing actions.

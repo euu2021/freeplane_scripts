@@ -1,6 +1,7 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://sourceforge.net/p/freeplane/discussion/758437/thread/e9200db6c3/
+// Version: 1.0.0
 
 //// @ExecutionModes({ON_SINGLE_NODE})
 

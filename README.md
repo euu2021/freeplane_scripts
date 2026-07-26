@@ -10,6 +10,34 @@ See [Start here page](https://docs.freeplane.org/scripting/Start_Here.html).
 
 Each file's header links to the forum thread it came from, if any.
 
+## Versions and changelog
+
+Scripts are versioned one by one, not as a collection: you install a single `.groovy` file, so
+everything you need to know about it lives in that file's header.
+
+```groovy
+// Copyright (C) 2026  euu2021 (Github)
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Discussion thread: https://github.com/freeplane/freeplane/discussions/1234
+// Version: 1.2.0
+```
+
+**Is my copy outdated?** Compare the `Version:` line of your file with the one here. If they
+differ, the script's `CHANGELOG` block (at the end of its documentation comment) lists what
+changed between the two.
+
+What the numbers mean:
+
+| Change | Meaning |
+|---|---|
+| **1**.0.0 → **2**.0.0 | You have to do something: reassign a shortcut, redo a setting, delete a state file, or upgrade Freeplane. Such entries are marked `(!)` in the changelog. |
+| 1.**0**.0 → 1.**1**.0 | New feature or new option. Replacing the file is enough. |
+| 1.0.**0** → 1.0.**1** | Fix or internal change, same usage. |
+
+Versioning starts on 2026-07-26, with every script at `1.0.0`; earlier history is in the
+repository log. A script only grows a `CHANGELOG` block once it changes after that date, so
+scripts that never needed a fix stay as short as they always were.
+
 ## Tags
 
 Scripts can belong to more than one category, so they are tagged. Ctrl-F a tag to find everything in that category.
