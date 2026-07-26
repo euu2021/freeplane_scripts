@@ -1,6 +1,6 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Version: 1.0
+// Version: 1.1
 
 /***************************************************************************
 
@@ -97,6 +97,13 @@
    - « on the title bar      -> pin the panel wide, ignoring hover (it grows leftwards,
                                 since the panel hangs on the right edge); » restores it
    - ✕ / ESC                 -> close (also clears the map filter it applied)
+
+ CHANGELOG
+   1.1 - Survives a map whose tag registry holds a NAMELESS tag. Freeplane refuses to read
+         the tags of such a map at all ("path contains blank segment"), and the panel used
+         to report just that and stop. It now names the cause and offers a one-click repair
+         on the status bar, which drops the nameless tag as a normal undo step.
+   1.0 - First public version.
 
  *****************************************************************/
 
@@ -303,6 +310,8 @@ import java.util.List
 @Field DefaultMutableTreeNode treeRootNode
 @Field JScrollPane treeScrollPane
 @Field JLabel statusLabel
+// what a click on the status bar does, when the message is an offer rather than a report
+@Field Closure statusAction = null
 @Field JButton wideButton
 @Field JButton editModeButton
 @Field JButton filterModeButton
@@ -873,6 +882,14 @@ void createTagPanel() {
     statusLabel.setOpaque(true)
     statusLabel.setBackground(barColor)
     statusLabel.setForeground(barTextColor())
+    // MOUSE_PRESSED, not MOUSE_CLICKED: the latter is suppressed by a micro-drag
+    statusLabel.addMouseListener(new MouseAdapter() {
+        @Override
+        void mousePressed(MouseEvent event) {
+            Closure action = statusAction
+            if (action != null) action()
+        }
+    })
     tagPanel.add(statusLabel, BorderLayout.SOUTH)
 
     bindKey(tagPanel, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT,
@@ -1635,6 +1652,108 @@ String separator() {
     }
 }
 
+/*
+ * A map can carry a NAMELESS tag, and then no tag of that map can be read at all.
+ *
+ * Freeplane keeps a sentinel tag with empty content (Tag.EMPTY_TAG) that the tag editor uses
+ * for the blank row you type into. It can end up registered in a map's tag registry, and from
+ * there it is serialized into the .mm like any other uncategorized tag — as a nameless
+ * `tagcolor<N>="#000000ff"`. Reopening the map brings it back, and every read of the tag state
+ * then dies inside TagCategoryNamePolicy with "path contains blank segment", because
+ * TagCategoryStateBuilder builds a TagItem whose path is [""]. It is not the panel failing:
+ * the whole public tag API of that map is unusable while the nameless tag is there.
+ *
+ * ✅ verified on 1.13.x: planting Tag.EMPTY_TAG under the uncategorized node of a COPY of a
+ * live map's categories reproduces the exact message, and dropping it makes the read succeed.
+ */
+boolean isBlankTagFailure(Throwable t) {
+    String message = t?.getMessage()
+    return message != null && (message.contains("blank segment") || message.contains("must not be blank"))
+}
+
+/** The nameless tags sitting among the map's uncategorized tags — the ones we can drop safely. */
+List<DefaultMutableTreeNode> blankRegistryTagNodes(TagCategories categories) {
+    List<DefaultMutableTreeNode> blanks = []
+    DefaultMutableTreeNode uncategorized = categories.getUncategorizedTagsNode()
+    for (int i = 0; i < uncategorized.getChildCount(); i++) {
+        DefaultMutableTreeNode child = (DefaultMutableTreeNode) uncategorized.getChildAt(i)
+        Object userObject = child.getUserObject()
+        if (userObject instanceof Tag && ((Tag) userObject).getContent().trim().isEmpty()) blanks << child
+    }
+    return blanks
+}
+
+/** Removes the nameless tags from the map's registry. Asks first: it changes the map. */
+void repairBlankRegistryTags() {
+    MapModel map = boundMapView.map
+    TagCategories categories
+    List<DefaultMutableTreeNode> blanks
+    try {
+        categories = map.getIconRegistry().getTagCategories()
+        blanks = blankRegistryTagNodes(categories)
+    } catch (Throwable t) {
+        showStatus("Could not inspect the tag registry: " + t.getMessage())
+        return
+    }
+    if (blanks.isEmpty()) {
+        showStatus("No nameless tag left in this map")
+        refreshTree()
+        return
+    }
+
+    String count = blanks.size() + " nameless tag" + (blanks.size() == 1 ? "" : "s")
+    int answer = JOptionPane.showConfirmDialog(tagPanel,
+            "This map carries " + count + " in its tag registry, and that makes\n" +
+            "Freeplane refuse to read the tags of the whole map.\n\n" +
+            "Remove it from the registry?\n" +
+            "No node loses a tag it actually uses, one Ctrl+Z undoes it, and the\n" +
+            "map has to be saved for the repair to stick.",
+            "Repair the tag registry", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE)
+    if (answer != JOptionPane.OK_OPTION) return
+
+    try {
+        TagCategories repaired = categories.copy()
+        DefaultMutableTreeNode uncategorized = repaired.getUncategorizedTagsNode()
+        int removed = 0
+        for (int i = uncategorized.getChildCount() - 1; i >= 0; i--) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) uncategorized.getChildAt(i)
+            Object userObject = child.getUserObject()
+            if (userObject instanceof Tag && ((Tag) userObject).getContent().trim().isEmpty()) {
+                uncategorized.remove(i)
+                removed++
+            }
+        }
+        // MIconController.setTagCategories wraps the swap in an IActor, so the repair is a
+        // normal undo step and marks the map unsaved
+        IconController.getController().setTagCategories(map, repaired)
+        showStatus("Removed " + removed + " nameless tag" + (removed == 1 ? "" : "s")
+                + " — save the map to keep the repair")
+        refreshTree()
+    } catch (Throwable t) {
+        showStatus("Repair failed: " + t.getMessage())
+    }
+}
+
+/** Single place where a failed read is turned into a message — actionable when we can fix it. */
+void reportReadFailure(Throwable t) {
+    if (isBlankTagFailure(t)) {
+        int blanks = 0
+        try {
+            blanks = blankRegistryTagNodes(boundMapView.map.getIconRegistry().getTagCategories()).size()
+        } catch (Throwable ignored) {
+        }
+        if (blanks > 0) {
+            showActionableStatus(
+                    "This map has " + blanks + " nameless tag" + (blanks == 1 ? "" : "s") + " — click to repair",
+                    "Freeplane cannot read the tags of a map whose registry holds a tag with an empty"
+                            + " name. Click to remove it (undoable).",
+                    { repairBlankRegistryTags() })
+            return
+        }
+    }
+    showStatus("Could not read tags: " + t.getMessage())
+}
+
 void refreshTree() {
     refreshTree(false)
 }
@@ -1670,7 +1789,7 @@ void refreshTree(boolean force) {
     try {
         state = readState()
     } catch (Throwable t) {
-        showStatus("Could not read tags: " + t.getMessage())
+        reportReadFailure(t)
         return
     }
 
@@ -2558,7 +2677,7 @@ void applyBranchColor(TagRow row, String colorSpec) {
     try {
         state = readState()
     } catch (Throwable t) {
-        showStatus("Could not read tags: " + t.getMessage())
+        reportReadFailure(t)
         return
     }
 
@@ -2626,7 +2745,7 @@ void moveSelectedTag(String direction) {
     try {
         state = readState()
     } catch (Throwable t) {
-        showStatus("Could not read tags: " + t.getMessage())
+        reportReadFailure(t)
         return
     }
 
@@ -2746,7 +2865,7 @@ void addChildTag(TagRow parentRow) {
     try {
         state = readState()
     } catch (Throwable t) {
-        showStatus("Could not read tags: " + t.getMessage())
+        reportReadFailure(t)
         return
     }
     List existing = childrenAt(state, parentRow.path)
@@ -3371,7 +3490,7 @@ void deleteAllUnusedTags() {
     try {
         state = readState()
     } catch (Throwable t) {
-        showStatus("Could not read tags: " + t.getMessage())
+        reportReadFailure(t)
         return
     }
     List<Map> victims = unusedTagsToDelete(state)
@@ -3623,7 +3742,24 @@ void applyPanelBounds(int width) {
 */
 
 void showStatus(String message) {
-    if (statusLabel != null) statusLabel.setText(" " + message)
+    if (statusLabel == null) return
+    statusAction = null
+    statusLabel.setText(" " + message)
+    statusLabel.setCursor(Cursor.getDefaultCursor())
+    statusLabel.setToolTipText(null)
+}
+
+/**
+ * A status message that is also a button: underlined, hand cursor, and clicking it runs
+ * `action`. Used when the panel cannot do its job but knows how to fix it, and the fix
+ * touches the map — so it must be the user who asks for it, not us.
+ */
+void showActionableStatus(String message, String tooltip, Closure action) {
+    if (statusLabel == null) return
+    statusLabel.setText("<html><u> " + HtmlUtils.toXMLEscapedText(message) + "</u></html>")
+    statusLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR))
+    statusLabel.setToolTipText(tooltip)
+    statusAction = action
 }
 
 JPanel transparentPanel(LayoutManager layout) {
