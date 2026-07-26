@@ -166,8 +166,17 @@ treeTable.packAll()
 // Integration with Freeplane: Adding the TreeTable to the masterPanel
 // ----------------------------------------------------------------------------
 
-// Get the parent panel where the TreeTable will be added
-def parentPanel = controller.mapViewManager.mapView.parent.parent as JScrollPane
+// Where the panel will hang. NOT the scroll pane: it reports isOptimizedDrawingEnabled() ==
+// true, promising Swing that its children never overlap — a promise broken the moment a
+// panel sits over the viewport. Swing is then free to repaint the viewport alone and wipe
+// the panel for a frame (the flicker seen with the Map Overview turned OFF; the overview
+// being visible merely masked it). Its parent, Freeplane's own MapViewPane, exists FOR
+// overlap: isOptimizedDrawingEnabled() returns false there, and its layout ignores children
+// added WITHOUT constraints — exactly how Freeplane hangs the Map Overview itself.
+def scrollPane = controller.mapViewManager.mapView.parent.parent as JScrollPane
+def parentContainer = scrollPane.getParent()
+// matched by name: the package is not part of the scripting API, so it cannot be imported
+def parentPanel = (parentContainer != null && parentContainer.getClass().getSimpleName() == "MapViewPane") ? parentContainer : scrollPane
 
 // Create a new panel to contain the TreeTable
 def treeTablePanel = new JPanel(new BorderLayout())
@@ -189,7 +198,10 @@ treeTablePanel.add(treeScrollPane, BorderLayout.CENTER)
 
 // Create the masterPanel that will contain the TreeTable
 def masterPanel = new JPanel(new BorderLayout()) // Using BorderLayout for better control
-masterPanel.setBounds(0, 0, 800, 600) // Adjust the size as needed
+// pinned to the viewport's corner, expressed in the host's coordinates (on the MapViewPane
+// that corner is not 0,0 — the scroll pane has a border of its own)
+def viewportCorner = SwingUtilities.convertPoint(scrollPane, scrollPane.getViewport().getLocation(), parentPanel)
+masterPanel.setBounds(viewportCorner.x as int, viewportCorner.y as int, 800, 600) // Adjust the size as needed
 masterPanel.setOpaque(true) // Set as opaque to ensure visibility
 masterPanel.setBackground(Color.WHITE) // Set background to white
 
@@ -199,7 +211,8 @@ masterPanel.add(treeTablePanel, BorderLayout.CENTER)
 // Make the masterPanel visible
 masterPanel.setVisible(true)
 
-// Add the masterPanel to the parentPanel
+// Add the masterPanel to the parentPanel. No constraint, ON PURPOSE: the MapViewPane's
+// layout only lays out constrained children, so ours keeps the bounds set by hand.
 parentPanel.add(masterPanel)
 
 // Set the z-order to ensure the masterPanel is on top
