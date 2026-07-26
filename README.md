@@ -24,7 +24,16 @@ everything you need to know about it lives in that file's header.
 
 **Is my copy outdated?** Compare the `Version:` line of your file with the one here. If they
 differ, the script's `CHANGELOG` block (at the end of its documentation comment) lists what
-changed between the two.
+changed between the two, newest first:
+
+```
+ CHANGELOG
+ ---------
+   1.1 (2026-07-26)
+       What changed, and what you have to do about it, if anything.
+   1.0 (2026-07-21)
+       First public version.
+```
 
 What the numbers mean:
 

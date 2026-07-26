@@ -13,11 +13,13 @@
  *
  * CHANGELOG
  * ---------
- * 1.1 (2026-07-26)  The "//init" marker line was removed. Which scripts start automatically
- *                   is now declared by the tool that starts them, not by a marker inside the
- *                   file. If you were relying on initScriptsTool finding that marker, add
- *                   this script to your autostart list instead.
- * 1.0 (2026-07-26)  First versioned release. Earlier history is in the repository log.
+ *   1.1 (2026-07-26)
+ *       The "//init" marker line was removed. Which scripts start automatically is now
+ *       declared by the tool that starts them, not by a marker inside the file. If you
+ *       were relying on initScriptsTool finding that marker, add this script to your
+ *       autostart list instead.
+ *   1.0 (2026-07-26)
+ *       First versioned release. Earlier history is in the repository log.
  */
 
 import org.freeplane.features.map.*

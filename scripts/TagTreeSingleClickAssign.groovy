@@ -40,10 +40,12 @@
 
  CHANGELOG
  ---------
- 1.1 (2026-07-26)  Clicks no longer assign a tag while the tag tree is in edit mode, so
-                   reorganizing the hierarchy with the companion script
-                   TagTreeKeyboardReorder does not tag the current node on every click.
- 1.0 (2026-07-26)  First versioned release. Earlier history is in the repository log.
+   1.1 (2026-07-26)
+       Clicks no longer assign a tag while the tag tree is in edit mode, so reorganizing
+       the hierarchy with the companion script TagTreeKeyboardReorder does not tag the
+       current node on every click.
+   1.0 (2026-07-26)
+       First versioned release. Earlier history is in the repository log.
 
  *****************************************************************/
 

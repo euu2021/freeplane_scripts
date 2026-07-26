@@ -99,15 +99,18 @@
    - ✕ / ESC                 -> close (also clears the map filter it applied)
 
  CHANGELOG
-   1.1 - Survives a map whose tag registry holds a NAMELESS tag. Freeplane refuses to read
-         the tags of such a map at all ("path contains blank segment"), and the panel used
-         to report just that and stop. It now names the cause and offers a one-click repair
-         on the status bar, which drops the nameless tag from the registry AND from the nodes
-         that carry it (cleaning only the registry would let it come back on the next load),
-         as a normal undo step.
-         Also fixes a latent crash on any map with a TRANSLUCENT tag colour: blendColors took
-         a primitive float, and the alpha ratio is a Double in Groovy.
-   1.0 - First public version.
+ ---------
+   1.1 (2026-07-26)
+       Survives a map whose tag registry holds a NAMELESS tag. Freeplane refuses to read
+       the tags of such a map at all ("path contains blank segment"), and the panel used
+       to report just that and stop. It now names the cause and offers a one-click repair
+       on the status bar, which drops the nameless tag from the registry AND from the nodes
+       that carry it (cleaning only the registry would let it come back on the next load),
+       as a normal undo step.
+       Also fixes a latent crash on any map with a TRANSLUCENT tag colour: blendColors took
+       a primitive float, and the alpha ratio is a Double in Groovy.
+   1.0 (2026-07-26)
+       First public version.
 
  *****************************************************************/
 
