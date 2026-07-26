@@ -9,7 +9,7 @@
 
  Unified Tag Panel — "one tag panel to rule them all".
 
- Discussion threads: https://github.com/freeplane/freeplane/issues/2926 · https://github.com/freeplane/freeplane/discussions/2257
+ Discussion threads: https://github.com/freeplane/freeplane/discussions/2953 (announcement) · https://github.com/freeplane/freeplane/issues/2926 · https://github.com/freeplane/freeplane/discussions/2257
 
  One overlay panel that unifies Freeplane's three tag interfaces:
    1. the Tags side panel (view + filter + assign),
