@@ -1,7 +1,7 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2954
-// Version: 1.0
+// Version: 1.1
 
 import java.awt.*
 import java.awt.event.*
@@ -34,32 +34,11 @@ import org.freeplane.plugin.script.ScriptingEngine
 // ------------
 // 1. Put this file in any of your script directories, next to your other scripts. Running it
 //    from the Scripts menu opens the configuration window.
-// 2. Save the bridge below as autoRunScriptsBridge.groovy in <user directory>/scripts/init/ --
-//    the only folder Freeplane runs on its own. It looks this file up by name in the script
-//    directories, so neither file needs editing.
-//
-//     import org.freeplane.core.resources.ResourceController
-//     import org.freeplane.core.util.FileUtils
-//     import org.freeplane.core.util.LogUtils
-//     import org.freeplane.features.mode.Controller
-//     import org.freeplane.plugin.script.ScriptingEngine
-//
-//     def resourceController = ResourceController.resourceController
-//     def userDirectory = resourceController.freeplaneUserDirectory
-//     def script = (resourceController.getProperty('script_directories') ?: '')
-//             .split(/;+/)*.trim().findAll { it }
-//             .collect { new File(FileUtils.getAbsoluteFile(userDirectory, it), 'autoRunScripts.groovy') }
-//             .find { it.isFile() }
-//
-//     if (script == null) {
-//         LogUtils.warn('autoRunScripts.groovy not found in any of the configured script directories')
-//     }
-//     else {
-//         javax.swing.UIManager.put('autoRunScripts.bootstrap', Boolean.TRUE)
-//         ScriptingEngine.executeScript(Controller.currentController.selection?.selected, script, null)
-//     }
-//
-// Restart Freeplane once, so that both files are picked up.
+// 2. Press "Install startup hook" in that window. Freeplane only runs, by itself, the scripts
+//    in <user directory>/scripts/init, so a small bridge has to live there; the button writes
+//    it. The window says so on its own when the hook is missing, and until it exists nothing
+//    runs at the next start, however full the list looks.
+// 3. Restart Freeplane once, so that both files are picked up.
 //
 // Configuration lives in <user directory>/autoRunScripts.txt: one line per script,
 // "<TRIGGER><tab><path>", in execution order, with a third tab-separated field holding the
@@ -81,6 +60,15 @@ import org.freeplane.plugin.script.ScriptingEngine
 // to the map or tab that triggered it, and the user's script permissions. A script can ask
 // which trigger called it with UIManager.get('autoRunScripts.trigger'), which is MANUAL when
 // it was started from the buttons in the dialog.
+//
+// CHANGELOG
+// ---------
+//   1.1 (2026-07-27)
+//       The window now notices when the startup hook is missing and offers to install it.
+//       Until now a fully configured list could look active while nothing at all would run
+//       at the next start, with nothing on screen saying so.
+//   1.0 (2026-07-27)
+//       First public version.
 
 class AutoRunEntry {
     File file
@@ -443,6 +431,52 @@ def labelOf = { String key -> TRIGGER_LABELS[AutoRunDispatcher.TRIGGERS.indexOf(
 def userDir = new File(ResourceController.resourceController.freeplaneUserDirectory)
 def listFile = new File(userDir, 'autoRunScripts.txt')
 def dialogName = 'autoRunScriptsDialog'
+
+// Freeplane runs, on its own, only what is in <user directory>/scripts/init, so a bridge has
+// to live there. Keeping its source here means the file the button writes and the file this
+// script expects can never drift apart.
+def initScriptsDir = new File(userDir, 'scripts/init')
+def bridgeSource = '''// Copyright (C) 2026  euu2021 (Github)
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Discussion thread: https://github.com/freeplane/freeplane/discussions/2954
+
+// Freeplane only runs, by itself, the scripts in <user directory>/scripts/init. This file
+// lives there and hands over to autoRunScripts.groovy, which lives with the other scripts.
+// It is found by name in the registered script directories, so this file needs no editing.
+
+import org.freeplane.core.resources.ResourceController
+import org.freeplane.core.util.FileUtils
+import org.freeplane.core.util.LogUtils
+import org.freeplane.features.mode.Controller
+import org.freeplane.plugin.script.ScriptingEngine
+
+def resourceController = ResourceController.resourceController
+def userDirectory = resourceController.freeplaneUserDirectory
+def script = (resourceController.getProperty('script_directories') ?: '')
+        .split(/;+/)*.trim().findAll { it }
+        .collect { new File(FileUtils.getAbsoluteFile(userDirectory, it), 'autoRunScripts.groovy') }
+        .find { it.isFile() }
+
+if (script == null) {
+    LogUtils.warn('autoRunScripts.groovy not found in any of the configured script directories')
+}
+else {
+    // the flag tells it to install the triggers instead of opening the configuration dialog
+    javax.swing.UIManager.put('autoRunScripts.bootstrap', Boolean.TRUE)
+    ScriptingEngine.executeScript(Controller.currentController.selection?.selected, script, null)
+}
+'''
+
+// any .groovy in there that mentions this script counts, whatever the file is called
+def installedBridge = {
+    def candidates = initScriptsDir.listFiles({ File f ->
+        f.isFile() && f.name.toLowerCase().endsWith('.groovy')
+    } as FileFilter)
+    return candidates?.find { File f ->
+        try { return f.getText('UTF-8').contains('autoRunScripts') }
+        catch (Throwable ignored) { return false }
+    }
+}
 
 // script_directories accepts relative paths, resolved against the user directory
 def scriptDirs = {
@@ -934,6 +968,32 @@ def openDialog = {
         status.text = "Removed ${file.name} from the list. Now: ${describe()}."
     } as ActionListener)
 
+    // Without the bridge nothing runs at the next start, however full this list looks -- and
+    // there is no way to notice from inside Freeplane. Hence saying so, and offering the fix.
+    def hookButton = new JButton('Install startup hook')
+    def updateHookButton = {
+        def bridge = installedBridge()
+        hookButton.enabled = (bridge == null)
+        hookButton.toolTipText = bridge
+                ? "Already installed: ${bridge}"
+                : "Write ${new File(initScriptsDir, 'autoRunScriptsBridge.groovy')}, so that this list is applied at every start"
+    }
+    hookButton.addActionListener({
+        def target = new File(initScriptsDir, 'autoRunScriptsBridge.groovy')
+        try {
+            initScriptsDir.mkdirs()
+            target.setText(bridgeSource, 'UTF-8')
+            LogUtils.info("startup hook written to ${target}")
+            updateHookButton()
+            status.text = "Startup hook written. It takes effect the next time Freeplane starts."
+        }
+        catch (Throwable t) {
+            LogUtils.warn("could not write ${target}", t)
+            status.text = "Could not write ${target}: ${t.message}"
+        }
+    } as ActionListener)
+    updateHookButton()
+
     def pauseButton = new JButton()
     def updatePauseButton = {
         boolean paused = AutoRunDispatcher.isPaused()
@@ -968,8 +1028,8 @@ def openDialog = {
     runAllButton.addActionListener({ runFiles(model.active.collect { it.file }) } as ActionListener)
 
     def buttonBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6))
-    [upButton, downButton, removeButton, runSelectedButton, runAllButton, historyButton, pauseButton]
-            .each { buttonBar.add(it) }
+    [upButton, downButton, removeButton, runSelectedButton, runAllButton, historyButton,
+     pauseButton, hookButton].each { buttonBar.add(it) }
     def rightBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6))
     rightBar.add(closeButton)
 
@@ -1007,7 +1067,10 @@ def openDialog = {
     dialog.rootPane.registerKeyboardAction({ dialog.dispose() } as ActionListener,
             KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW)
 
-    status.text = "${describe()}, out of ${model.rowCount} script(s) found."
+    def summary = "${describe()}, out of ${model.rowCount} script(s) found."
+    status.text = installedBridge() == null
+            ? "Startup hook missing: nothing will run at the next start. ${summary}"
+            : summary
     placeInsideScreen(dialog, 0)
     dialog.visible = true
     return dialog
