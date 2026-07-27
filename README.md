@@ -74,6 +74,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | Script | What it does | Tags |
 |---|---|---|
 | [applyCustomEdgeColors](scripts/applyCustomEdgeColors.groovy) | Applies the user-defined edge colors to the selected nodes and their whole branch, cycling through colors. | `styles` |
+| [autoMinimizerListener](scripts/autoMinimizerListener.groovy) | Listener that keeps the map compact: any node longer than the shortened-text length is shown minimized, no matter how it appeared — typed, pasted, imported, created by a script or by the AI, or already in a map you open. | `listener` `fold/minimize` `editing` |
 | [autoRunScripts](scripts/autoRunScripts.groovy) | Window to pick which scripts Freeplane runs by itself and when: at startup, when a map opens or closes, when a tab is created or selected, every N minutes, or on the way out. Keeps a history of what ran, with durations. | `init` `listener` `panel/GUI` |
 | [autoScrollModes](scripts/autoScrollModes.groovy) | Selection listeners that keep the current node positioned as you navigate (auto-scroll modes). | `navigation` `view` `listener` |
 | [conditionalStyleByFilter](scripts/conditionalStyleByFilter.groovy) | Adds a conditional style to the nodes matched by a script filter. | `styles` `filter/search` |
@@ -94,7 +95,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 | [noteFontSizeSlider](scripts/noteFontSizeSlider.groovy) | Slider dialog to quickly adjust the Note style's font size. | `styles` `panel/GUI` |
 | [openLinkedMapAndClose](scripts/openLinkedMapAndClose.groovy) | Opens the map linked from the selected node and closes the current one (backlink navigation without piling up open maps). | `maps` `navigation` |
 | [OutlineLiveFilter](scripts/OutlineLiveFilter.groovy) | Type-to-filter field docked in the Outline panel; filters the outline only, leaving the map untouched. | `filter/search` `panel/GUI` |
-| [paste_and_minimize](scripts/paste_and_minimize.groovy) | Pastes, then auto-minimizes the just-pasted nodes that exceed the shortened-text length. | `clipboard` `fold/minimize` `editing` |
+| [paste_and_minimize](scripts/paste_and_minimize.groovy) | Pastes, then auto-minimizes the just-pasted nodes that exceed the shortened-text length. Superseded by autoMinimizerListener, which covers every way a node can appear. | `clipboard` `fold/minimize` `editing` |
 | recentRootsNavigator [script1](scripts/recentRootsNavigator_script1.groovy) · [script2](scripts/recentRootsNavigator_script2.groovy) | The Recent Roots Navigator — a tabless jump-in workflow to move between recently used view-roots (main panel + its launcher shortcut). | `navigation` `maps` `panel/GUI` |
 | [removeLastTag](scripts/removeLastTag.groovy) | Removes the last tag from the selected nodes. | `tags` `editing` |
 | [resizeMapOverview](scripts/resizeMapOverview.groovy) | Resizes the Map Overview panel (the bird's-eye overview box) to any width/height you set. | `view` `panel/GUI` |
