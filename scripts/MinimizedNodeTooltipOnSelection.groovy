@@ -1,24 +1,42 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Version: 1.0
+// Version: 1.1
 
 /**
- * Minimized node tooltip on keyboard selection.
+ * Minimized node tooltip on selection.
  *
  * Freeplane shows the full content of a minimized (shortened) node as a tooltip when the
  * mouse hovers over it. This script does the same when the selection reaches such a node
- * through the keyboard, so the content can be read without touching the mouse.
+ * without the mouse, so the content can be read without hovering.
  *
  * The tooltip is the native one: it is built by the very same MainView.createToolTip() /
  * getToolTipText() the hover path uses, so styling, details, notes and attributes look
  * exactly as usual.
  *
- * It appears only when the selection actually changes because of a key press, so pressing
- * an unrelated key never pops it up. It disappears on the next selection change, on any
- * mouse press, on mouse wheel scrolling and when the window loses focus.
+ * Two things trigger it. Key presses inside the map view, which covers arrow navigation.
+ * And selection changes themselves, which covers everything that moves the selection
+ * without a key press: bookmarks, other scripts, panels. Watching the selection is what
+ * makes it work no matter who moved it; watching key presses on top of that is what keeps
+ * it responsive while holding an arrow key down.
+ *
+ * A selection caused by clicking is deliberately ignored — hovering already shows the
+ * tooltip there, and popping a second one under the pointer is just noise. That is what
+ * the mouse press grace period below is for.
+ *
+ * It disappears on the next selection change, on any mouse press, on mouse wheel scrolling
+ * and when the window loses focus.
  *
  * Running the script installs it; running it again removes it (toggle). The status bar
  * reports which of the two happened.
+ *
+ * CHANGELOG
+ * ---------
+ *   1.1 (2026-07-29)
+ *       Also triggers on selection changes, not only on key presses, so the tooltip now
+ *       shows up when the selection is moved by a bookmark, a panel or another script.
+ *       Clicking still does not raise it.
+ *   1.0 (2026-07-28)
+ *       First public version.
  */
 
 import java.awt.AWTEvent
@@ -50,11 +68,12 @@ import javax.swing.text.JTextComponent
 
 import org.freeplane.core.resources.ResourceController
 import org.freeplane.core.ui.components.UITools
+import org.freeplane.features.map.INodeSelectionListener
 import org.freeplane.features.map.NodeModel
 import org.freeplane.features.mode.Controller
 import org.freeplane.features.text.TextController
 
-class MinimizedNodeTooltipWatcher implements AWTEventListener {
+class MinimizedNodeTooltipWatcher implements AWTEventListener, INodeSelectionListener {
 
     /** false shows the tooltip for every node that has one, not only for minimized ones. */
     static final boolean MINIMIZED_ONLY = true
@@ -64,6 +83,8 @@ class MinimizedNodeTooltipWatcher implements AWTEventListener {
     static final int FOLLOW_UP_DELAY_MILLIS = 300
     /** 0 keeps the tooltip until something else hides it. */
     static final int AUTO_HIDE_MILLIS = 0
+    /** a selection landing this soon after a mouse press is taken to be that click's own. */
+    static final int MOUSE_GRACE_MILLIS = 250
 
     private static final String SHOW_NODE_TOOLTIPS = 'show_node_tooltips'
 
@@ -76,6 +97,7 @@ class MinimizedNodeTooltipWatcher implements AWTEventListener {
     private String popupText
     private Point popupLocation
     private WeakReference<NodeModel> lastSelection = new WeakReference<NodeModel>(null)
+    private long lastMousePressAt = 0L
 
     MinimizedNodeTooltipWatcher() {
         showTimer = new javax.swing.Timer(SHOW_DELAY_MILLIS, { evaluateSelection(true) } as ActionListener)
@@ -101,6 +123,7 @@ class MinimizedNodeTooltipWatcher implements AWTEventListener {
         }
         if (event instanceof MouseEvent) {
             if (id == MouseEvent.MOUSE_PRESSED) {
+                lastMousePressAt = System.currentTimeMillis()
                 showTimer.stop()
                 followUpTimer.stop()
                 hideTip()
@@ -111,6 +134,23 @@ class MinimizedNodeTooltipWatcher implements AWTEventListener {
         if (event instanceof WindowEvent && id == WindowEvent.WINDOW_LOST_FOCUS) {
             hideTip()
         }
+    }
+
+    /**
+     * The selection moved. The click case is skipped: selecting by mouse runs inside the
+     * mouse press, so a selection arriving right after one belongs to that click, and the
+     * hover tooltip already covers it.
+     */
+    @Override
+    void onSelect(NodeModel selected) {
+        if (System.currentTimeMillis() - lastMousePressAt < MOUSE_GRACE_MILLIS) {
+            return
+        }
+        showTimer.restart()
+    }
+
+    @Override
+    void onDeselect(NodeModel deselected) {
     }
 
     void uninstall() {
@@ -251,6 +291,8 @@ class MinimizedNodeTooltipWatcher implements AWTEventListener {
 }
 
 Toolkit toolkit = Toolkit.getDefaultToolkit()
+def mapController = Controller.getCurrentController().getModeController().getMapController()
+
 List<AWTEventListener> installed = []
 toolkit.getAWTEventListeners().each { AWTEventListener listener ->
     AWTEventListener target = listener instanceof AWTEventListenerProxy ? ((AWTEventListenerProxy) listener).getListener() : listener
@@ -267,14 +309,26 @@ installed.each { AWTEventListener old ->
     toolkit.removeAWTEventListener(old)
 }
 
+// compared by name, not by type: a recompiled script produces a different class, so the
+// previous generation would not be recognised by instanceof
+boolean hadSelectionWatcher = false
+new ArrayList(mapController.getNodeSelectionListeners()).each { listener ->
+    if (listener.getClass().getSimpleName() == MinimizedNodeTooltipWatcher.getSimpleName()) {
+        mapController.removeNodeSelectionListener(listener)
+        hadSelectionWatcher = true
+    }
+}
+
 String message
-if (installed.isEmpty()) {
+if (installed.isEmpty() && !hadSelectionWatcher) {
     long mask = AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK | AWTEvent.MOUSE_WHEEL_EVENT_MASK | AWTEvent.WINDOW_FOCUS_EVENT_MASK
-    toolkit.addAWTEventListener(new MinimizedNodeTooltipWatcher(), mask)
-    message = 'Minimized node tooltip on keyboard selection: enabled'
+    MinimizedNodeTooltipWatcher watcher = new MinimizedNodeTooltipWatcher()
+    toolkit.addAWTEventListener(watcher, mask)
+    mapController.addNodeSelectionListener(watcher)
+    message = 'Minimized node tooltip on selection: enabled'
 }
 else {
-    message = 'Minimized node tooltip on keyboard selection: disabled'
+    message = 'Minimized node tooltip on selection: disabled'
 }
 Controller.getCurrentController().getViewController().out(message)
 return message
