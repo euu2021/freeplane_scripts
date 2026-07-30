@@ -73,7 +73,10 @@ import org.freeplane.plugin.script.ScriptingEngine
 //       hook looked for this script in the same too-short list, so it could fail to find
 //       it; it is now rewritten by the button, which offers the update when the installed
 //       one is older. Folder lists are read with Freeplane's own separator, ':' on Linux
-//       and Mac, instead of always ';'. Reported by aaa1386.
+//       and Mac, instead of always ';'. Where a script comes from is now visible as well:
+//       every row tells its full path in a tooltip, the status bar tooltip lists the
+//       folders searched, and finding nothing is said instead of shown as an empty table.
+//       Reported by aaa1386.
 //   1.1 (2026-07-27)
 //       The window now notices when the startup hook is missing and offers to install it.
 //       Until now a fully configured list could look active while nothing at all would run
@@ -649,7 +652,17 @@ def openHistory = {
     }
 
     def model = new DefaultTableModel(['Time', 'Trigger', 'Script', 'Node', 'Map', 'ms', 'Result'] as String[], 0)
-    def table = new JTable(model)
+    // a failure message is the one cell that never fits, so every cell tells its whole content
+    def table = new JTable(model) {
+        @Override
+        String getToolTipText(MouseEvent event) {
+            int viewRow = rowAtPoint(event.getPoint())
+            int viewColumn = columnAtPoint(event.getPoint())
+            if (viewRow < 0 || viewColumn < 0) return null
+            def value = getValueAt(viewRow, viewColumn)
+            return value ? value.toString() : null
+        }
+    }
     table.setDefaultEditor(Object, null)
     fitRowHeight(table)
     fixColumn(table, 0, '00:00:00')
@@ -840,7 +853,17 @@ def openDialog = {
     }
     model.sortInactive()
 
-    def table = new JTable(model)
+    // The folder column shows the folder name alone, and two folders can be called "scripts":
+    // the one in the search path and the one Freeplane ships. Hence the full path in a tooltip.
+    def table = new JTable(model) {
+        @Override
+        String getToolTipText(MouseEvent event) {
+            int viewRow = rowAtPoint(event.getPoint())
+            if (viewRow < 0) return null
+            def file = ((AutoRunTableModel) getModel()).fileAt(convertRowIndexToModel(viewRow))
+            return file.isFile() ? file.absolutePath : file.absolutePath + '  (missing)'
+        }
+    }
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
     fitRowHeight(table)
     table.setAutoCreateRowSorter(false)
