@@ -1,7 +1,7 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2954
-// Version: 1.1
+// Version: 1.2
 
 import java.awt.*
 import java.awt.event.*
@@ -13,6 +13,7 @@ import java.util.regex.Pattern
 
 import org.freeplane.core.resources.ResourceController
 import org.freeplane.core.ui.components.UITools
+import org.freeplane.core.util.ConfigurationUtils
 import org.freeplane.core.util.FileUtils
 import org.freeplane.core.util.LogUtils
 import org.freeplane.features.map.IMapLifeCycleListener
@@ -21,6 +22,7 @@ import org.freeplane.features.map.NodeModel
 import org.freeplane.features.mode.Controller
 import org.freeplane.features.ui.IMapViewChangeListener
 import org.freeplane.main.application.ApplicationLifecycleListener
+import org.freeplane.plugin.script.ScriptResources
 import org.freeplane.plugin.script.ScriptingEngine
 
 // Runs scripts automatically, on the trigger chosen for each of them.
@@ -63,6 +65,15 @@ import org.freeplane.plugin.script.ScriptingEngine
 //
 // CHANGELOG
 // ---------
+//   1.2 (2026-07-30)
+//       The window listed only the folders named in the scripting preferences, so it was
+//       empty for everyone who keeps scripts where Freeplane puts them, in
+//       <user directory>/scripts. It now searches exactly what Freeplane searches: that
+//       folder and the built-in one as well, whatever the preference says. The startup
+//       hook looked for this script in the same too-short list, so it could fail to find
+//       it; it is now rewritten by the button, which offers the update when the installed
+//       one is older. Folder lists are read with Freeplane's own separator, ':' on Linux
+//       and Mac, instead of always ';'. Reported by aaa1386.
 //   1.1 (2026-07-27)
 //       The window now notices when the startup hook is missing and offers to install it.
 //       Until now a fully configured list could look active while nothing at all would run
@@ -435,27 +446,37 @@ def dialogName = 'autoRunScriptsDialog'
 // Freeplane runs, on its own, only what is in <user directory>/scripts/init, so a bridge has
 // to live there. Keeping its source here means the file the button writes and the file this
 // script expects can never drift apart.
-def initScriptsDir = new File(userDir, 'scripts/init')
+def initScriptsDir = ScriptResources.getInitScriptsDir()
 def bridgeSource = '''// Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Discussion thread: https://github.com/freeplane/freeplane/discussions/2954
 
 // Freeplane only runs, by itself, the scripts in <user directory>/scripts/init. This file
 // lives there and hands over to autoRunScripts.groovy, which lives with the other scripts.
-// It is found by name in the registered script directories, so this file needs no editing.
+// It is found by name in every folder Freeplane searches for scripts, so this file needs
+// no editing wherever autoRunScripts.groovy was put.
 
 import org.freeplane.core.resources.ResourceController
+import org.freeplane.core.util.ConfigurationUtils
 import org.freeplane.core.util.FileUtils
 import org.freeplane.core.util.LogUtils
 import org.freeplane.features.mode.Controller
+import org.freeplane.plugin.script.ScriptResources
 import org.freeplane.plugin.script.ScriptingEngine
 
 def resourceController = ResourceController.resourceController
 def userDirectory = resourceController.freeplaneUserDirectory
-def script = (resourceController.getProperty('script_directories') ?: '')
-        .split(/;+/)*.trim().findAll { it }
-        .collect { new File(FileUtils.getAbsoluteFile(userDirectory, it), 'autoRunScripts.groovy') }
-        .find { it.isFile() }
+def dirs = new LinkedHashSet<File>()
+def configured = resourceController.getProperty('script_directories')
+if (configured) {
+    ConfigurationUtils.decodeListValue(configured, false).each { String path ->
+        def trimmed = path.trim()
+        if (trimmed) dirs.add(FileUtils.getAbsoluteFile(userDirectory, trimmed))
+    }
+}
+dirs.add(ScriptResources.getUserScriptsDir())
+dirs.add(FileUtils.getAbsoluteFile(resourceController.installationBaseDir, 'scripts'))
+def script = dirs.collect { new File(it, 'autoRunScripts.groovy') }.find { it.isFile() }
 
 if (script == null) {
     LogUtils.warn('autoRunScripts.groovy not found in any of the configured script directories')
@@ -478,13 +499,28 @@ def installedBridge = {
     }
 }
 
-// script_directories accepts relative paths, resolved against the user directory
-def scriptDirs = {
-    (ResourceController.resourceController.getProperty('script_directories') ?: '')
-            .split(/;+/)*.trim().findAll { it }
-            .collect { FileUtils.getAbsoluteFile(userDir.absolutePath, it) }
-            .findAll { it.isDirectory() }
+// The same folders Freeplane itself scans, in the same way (ScriptingGuiConfiguration:215).
+// The scripting preference is a list "in addition to scripts", so <user directory>/scripts
+// and the built-in folder count even when it is empty -- reading only the preference left
+// this window empty for anyone who keeps scripts where Freeplane puts them.
+// Relative paths are resolved against the user directory, and the separator comes from
+// Freeplane's own decoder: it is File.pathSeparator, ':' on Linux and Mac, not always ';'.
+def searchedDirs = {
+    def resourceController = ResourceController.resourceController
+    def dirs = new LinkedHashSet<File>()
+    def configured = resourceController.getProperty('script_directories')
+    if (configured) {
+        ConfigurationUtils.decodeListValue(configured, false).each { String path ->
+            def trimmed = path.trim()
+            if (trimmed) dirs.add(FileUtils.getAbsoluteFile(userDir.absolutePath, trimmed))
+        }
+    }
+    dirs.add(ScriptResources.getUserScriptsDir())
+    dirs.add(FileUtils.getAbsoluteFile(resourceController.installationBaseDir, 'scripts'))
+    return new ArrayList<File>(dirs)
 }
+
+def scriptDirs = { searchedDirs().findAll { it.isDirectory() } }
 
 def readEntries = {
     def entries = []
@@ -971,12 +1007,23 @@ def openDialog = {
     // Without the bridge nothing runs at the next start, however full this list looks -- and
     // there is no way to notice from inside Freeplane. Hence saying so, and offering the fix.
     def hookButton = new JButton('Install startup hook')
+    // a hook written by an earlier version keeps working, but may look for this script in
+    // too few folders, so offer to rewrite it -- one written by hand is left alone
+    def outdatedBridge = {
+        def bridge = installedBridge()
+        if (bridge == null || !bridge.name.equalsIgnoreCase('autoRunScriptsBridge.groovy')) return null
+        try { return bridge.getText('UTF-8') == bridgeSource ? null : bridge }
+        catch (Throwable ignored) { return null }
+    }
     def updateHookButton = {
         def bridge = installedBridge()
-        hookButton.enabled = (bridge == null)
-        hookButton.toolTipText = bridge
-                ? "Already installed: ${bridge}"
-                : "Write ${new File(initScriptsDir, 'autoRunScriptsBridge.groovy')}, so that this list is applied at every start"
+        def outdated = outdatedBridge()
+        hookButton.text = bridge == null ? 'Install startup hook' : 'Update startup hook'
+        hookButton.enabled = (bridge == null || outdated != null)
+        hookButton.toolTipText = bridge == null
+                ? "Write ${new File(initScriptsDir, 'autoRunScriptsBridge.groovy')}, so that this list is applied at every start"
+                : (outdated ? "Rewrite ${outdated}: it was written by an earlier version of this script"
+                            : "Already installed: ${bridge}")
     }
     hookButton.addActionListener({
         def target = new File(initScriptsDir, 'autoRunScriptsBridge.groovy')
@@ -1049,6 +1096,10 @@ def openDialog = {
     // the cast is needed: in Groovy dimension.height reaches getHeight(), which is a double
     [status, pathLabel].each { it.preferredSize = new Dimension(0, (int) it.preferredSize.height) }
     statusBar.add(pathLabel, BorderLayout.SOUTH)
+    // where the scripts came from, for when the list is shorter than expected
+    status.toolTipText = '<html>Folders searched for scripts:<br>' +
+            searchedDirs().collect { it.absolutePath + (it.isDirectory() ? '' : ' (does not exist)') }.join('<br>') +
+            '</html>'
 
     def content = new JPanel(new BorderLayout())
     content.add(filterBar, BorderLayout.NORTH)
@@ -1067,10 +1118,14 @@ def openDialog = {
     dialog.rootPane.registerKeyboardAction({ dialog.dispose() } as ActionListener,
             KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW)
 
-    def summary = "${describe()}, out of ${model.rowCount} script(s) found."
+    def summary = model.rowCount
+            ? "${describe()}, out of ${model.rowCount} script(s) found."
+            : ("No script found in the ${searchedDirs().size()} folder(s) searched -- the status bar tooltip lists them. " +
+               'Further folders are added in Preferences > Plugins > Scripting.').toString()
     status.text = installedBridge() == null
             ? "Startup hook missing: nothing will run at the next start. ${summary}"
-            : summary
+            : (outdatedBridge() ? "Startup hook is from an earlier version: press Update startup hook. ${summary}"
+                                : summary)
     placeInsideScreen(dialog, 0)
     dialog.visible = true
     return dialog
