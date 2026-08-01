@@ -1,6 +1,6 @@
 // Copyright (C) 2026  euu2021 (Github)
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Version: 1.1
+// Version: 1.2
 
 /***************************************************************************
 
@@ -100,6 +100,11 @@
 
  CHANGELOG
  ---------
+   1.2 (2026-08-01)
+       Faster panel. Two changes, both invisible: the panel body is now painted with the map's
+       own background instead of being see-through (a transparent component makes each of its
+       repaints redraw the whole map underneath — set opaquePanelBody = false for the old look),
+       and the row renderer keeps its parsed HTML instead of rebuilding it on every repaint.
    1.1 (2026-07-26)
        Survives a map whose tag registry holds a NAMELESS tag. Freeplane refuses to read
        the tags of such a map at all ("path contains blank segment"), and the panel used
@@ -192,6 +197,13 @@ import java.util.List
 @Field int resizeAnimationSteps = 4
 @Field int resizeAnimationStepMs = 15
 @Field int resizeAnimationMaxRows = 80
+
+// Fill the panel's body with the map's own background instead of letting the map show through.
+// It looks almost the same (same colour) and it is MUCH cheaper: a transparent component makes
+// every repaint of itself climb to the nearest opaque ancestor -- the map pane -- so filtering,
+// hovering or re-counting repainted the WHOLE MAP underneath. Set to false to get the old
+// see-through body back.
+@Field boolean opaquePanelBody = true
 
 @Field int titleBarHeight = 24
 @Field String titleBarText = "Tags"
@@ -874,6 +886,11 @@ void followToView(Component newViewComponent) {
 void createTagPanel() {
     tagPanel = transparentPanel(new BorderLayout())
     tagPanel.setName(PANEL_NAME)
+    // see opaquePanelBody: this is a performance decision, not a cosmetic one
+    if (opaquePanelBody) {
+        tagPanel.setOpaque(true)
+        tagPanel.setBackground(mapBackground())
+    }
     tagPanel.setBorder(BorderFactory.createLineBorder(panelBorderColor(), panelBorderThickness))
 
     JPanel header = transparentPanel(new BorderLayout())
@@ -2226,6 +2243,23 @@ int firstNavigableRow() {
 TreeCellRenderer createTagRenderer() {
     JLabel label = new JLabel()
     label.setOpaque(true)
+    // ⚠️ A JTree paints its rows through a CellRendererPane, which ADDS the component to itself to
+    // paint it and REMOVES it afterwards. Entering and leaving a container fires
+    // "graphicsConfiguration", and BasicLabelUI answers that by REBUILDING the HTML view from
+    // scratch -- so every filtered row (the ones that carry <span> highlights) re-parsed its HTML
+    // on every repaint. Ignoring that one property keeps the parsed view alive. Measured elsewhere
+    // on a 286-row list of HTML cells: 1180 ms -> 11,5 ms per repaint.
+    // Trade-off: if the label moved to a screen with a different graphics configuration, its HTML
+    // would not be re-created for it.
+    label.setUI(new javax.swing.plaf.basic.BasicLabelUI() {
+        @Override
+        void propertyChange(java.beans.PropertyChangeEvent event) {
+            if ("graphicsConfiguration" == event.getPropertyName()) return
+            super.propertyChange(event)
+        }
+    })
+    // one border per colour instead of two fresh Border objects per row per repaint
+    Map<List, javax.swing.border.Border> borderCache = [:]
     return new TreeCellRenderer() {
         @Override
         Component getTreeCellRendererComponent(JTree tree, Object value, boolean isSelected,
@@ -2237,7 +2271,8 @@ TreeCellRenderer createTagRenderer() {
             label.setFont(itemFont())
 
             if (row == null || row.synthetic) {
-                // section header: plain text, readable against the MAP (panel body is transparent)
+                // section header: plain text, readable against the panel body, which carries the
+                // map's own background (transparent before opaquePanelBody, the same colour after)
                 label.setOpaque(false)
                 label.setText(row == null ? String.valueOf(value) : row.name)
                 label.setToolTipText(null)   // the label is shared; without this it keeps the previous row's
@@ -2282,9 +2317,14 @@ TreeCellRenderer createTagRenderer() {
             // while it was unselected — so selecting it clipped its own text with an
             // ellipsis. A highlight must never change the layout; when unselected the
             // border is painted in the chip's own colour and simply disappears.
-            label.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(edge, 2),
-                    BorderFactory.createEmptyBorder(1, 5, 1, 5)))
+            def cachedBorder = borderCache.get([edge.getRGB()])
+            if (cachedBorder == null) {
+                cachedBorder = BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(edge, 2),
+                        BorderFactory.createEmptyBorder(1, 5, 1, 5))
+                borderCache.put([edge.getRGB()], cachedBorder)
+            }
+            label.setBorder(cachedBorder)
             return label
         }
     }
