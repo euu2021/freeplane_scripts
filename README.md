@@ -75,6 +75,7 @@ Sibling scripts (directional variants, script pairs) share a single row.
 
 | | Script | What it does | Tags |
 |:-:|---|---|---|
+| | [appendReversedPath](scripts/appendReversedPath.groovy) | Appends a reversed copy of a chain of nodes to its end, so `A → B → C → D → E` becomes `A → B → C → D → E → E → D → C → B → A`. Select the first and last node of the chain (or a single node, for the path from the root). Copies keep formatting, icons, attributes, details and notes. | `editing` |
 | | [applyCustomEdgeColors](scripts/applyCustomEdgeColors.groovy) | Applies the user-defined edge colors to the selected nodes and their whole branch, cycling through colors. | `styles` |
 | ⭐ | [autoMinimizerListener](scripts/autoMinimizerListener.groovy) | Listener that keeps the map compact: any node longer than the shortened-text length is shown minimized, no matter how it appeared — typed, pasted, imported, created by a script or by the AI, or already in a map you open. | `listener` `fold/minimize` `editing` |
 | ⭐ | [autoRunScripts](scripts/autoRunScripts.groovy) | Window to pick which scripts Freeplane runs by itself and when: at startup, when a map opens or closes, when a tab is created or selected, every N minutes, or on the way out. Keeps a history of what ran, with durations. | `init` `listener` `panel/GUI` |
